@@ -14,6 +14,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
     var window: GameWindow!
     var web: WKWebView!
     var floatItem: NSMenuItem!
+    var miniItem: NSMenuItem!
+    var normalFrame: NSRect?
 
     let saveURL: URL = {
         let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
@@ -25,6 +27,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
     func applicationDidFinishLaunching(_ notification: Notification) {
         let content = WKUserContentController()
         content.add(self, name: "save")
+        content.add(self, name: "badge")
         if let saved = try? String(contentsOf: saveURL, encoding: .utf8), !saved.isEmpty,
            let literal = try? JSONSerialization.data(withJSONObject: saved, options: .fragmentsAllowed),
            let js = String(data: literal, encoding: .utf8) {
@@ -40,7 +43,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
                             styleMask: [.titled, .closable, .miniaturizable, .resizable],
                             backing: .buffered, defer: false)
         window.title = "Pizza Ready"
-        window.contentMinSize = NSSize(width: 480, height: 330)
+        window.contentMinSize = NSSize(width: 360, height: 240)
         window.contentView = web
         window.center()
         window.setFrameAutosaveName("PizzaReadyMain")
@@ -59,6 +62,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         if message.name == "save", let data = message.body as? String {
             try? data.write(to: saveURL, atomically: true, encoding: .utf8)
         }
+        // Cash waiting in the shop, shown on the Dock icon while the window is in the background.
+        if message.name == "badge", let text = message.body as? String {
+            NSApp.dockTile.badgeLabel = text.isEmpty ? nil : text
+        }
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
@@ -73,6 +80,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
     }
 
     @objc func toggleFloat(_ sender: Any?) { setFloating(window.level != .floating) }
+
+    // Small window in the bottom-right corner, always on top. Toggle again to restore.
+    @objc func toggleMini(_ sender: Any?) {
+        if let frame = normalFrame {
+            normalFrame = nil
+            window.setFrame(frame, display: true, animate: true)
+            let keep = UserDefaults.standard.bool(forKey: "keepOnTop")
+            window.level = keep ? .floating : .normal
+            window.collectionBehavior = keep ? [.canJoinAllSpaces, .fullScreenAuxiliary] : []
+            miniItem.state = .off
+        } else {
+            normalFrame = window.frame
+            let area = (window.screen ?? NSScreen.main)?.visibleFrame ?? window.frame
+            let size = NSSize(width: 440, height: 300)
+            window.setFrame(NSRect(x: area.maxX - size.width - 16, y: area.minY + 16,
+                                   width: size.width, height: size.height), display: true, animate: true)
+            window.level = .floating
+            window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+            miniItem.state = .on
+        }
+    }
 
     func setFloating(_ on: Bool) {
         window.level = on ? .floating : .normal
@@ -97,6 +125,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         let winMenu = NSMenu(title: "Window")
         floatItem = winMenu.addItem(withTitle: "Keep on Top", action: #selector(toggleFloat(_:)), keyEquivalent: "t")
         floatItem.target = self
+        miniItem = winMenu.addItem(withTitle: "Mini Mode", action: #selector(toggleMini(_:)), keyEquivalent: "m")
+        miniItem.keyEquivalentModifierMask = [.command, .option]
+        miniItem.target = self
         winMenu.addItem(.separator())
         winMenu.addItem(withTitle: "Minimize", action: #selector(NSWindow.performMiniaturize(_:)), keyEquivalent: "m")
         winMenu.addItem(withTitle: "Close", action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w")

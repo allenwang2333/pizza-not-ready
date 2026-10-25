@@ -17,8 +17,10 @@
     box-shadow:0 3px 0 rgba(0,0,0,.18);position:relative}
   .bubble:after{content:"";position:absolute;left:50%;bottom:-6px;margin-left:-6px;border:6px solid transparent;
     border-bottom:0;border-top-color:#fff}
-  .bubble.done{background:#55efc4}
-  .bubble.done:after{border-top-color:#55efc4}
+  .bubble.vip{background:#fff3c4}
+  .bubble.vip:after{border-top-color:#fff3c4}
+  .pat{height:4px;border-radius:2px;background:rgba(0,0,0,.12);margin-top:3px;overflow:hidden}
+  .pat i{display:block;height:100%;border-radius:2px}
   .bar{width:54px;height:8px;border-radius:5px;background:rgba(0,0,0,.35);overflow:hidden;
     box-shadow:0 0 0 2px rgba(255,255,255,.7)}
   .bar i{display:block;height:100%;background:linear-gradient(#ffe08a,#f6a623);border-radius:5px}
@@ -40,8 +42,9 @@
     padding:5px 18px 5px 6px;border-radius:24px;font-size:24px;font-weight:900;
     box-shadow:0 4px 0 #136b3b,0 6px 14px rgba(0,0,0,.25);text-shadow:0 2px 0 rgba(0,0,0,.25)}
   #left{display:flex;flex-direction:column;align-items:flex-start;gap:6px}
-  #shopTag{background:rgba(40,25,10,.45);padding:3px 10px;border-radius:10px;font-size:12px;font-weight:800}
-  #shopTag:empty{display:none}
+  .pill{background:rgba(40,25,10,.5);padding:3px 10px;border-radius:10px;font-size:12px;font-weight:800}
+  .pill:empty{display:none}
+  #eventTag{background:linear-gradient(#ff7a45,#e8473b)}
   #money .coin{width:30px;height:30px;border-radius:50%;background:radial-gradient(circle at 35% 35%,#fff3b0,#f7c531 55%,#d99a0b);
     color:#a26a00;font-size:18px;display:flex;align-items:center;justify-content:center;text-shadow:none;
     box-shadow:inset 0 -2px 0 rgba(0,0,0,.15)}
@@ -81,6 +84,19 @@
     padding:10px 18px;border-radius:16px;font-weight:800;font-size:15px;opacity:0;transition:.3s;pointer-events:none;
     text-align:center;max-width:80vw;box-shadow:0 4px 0 #d9c3a0,0 8px 20px rgba(0,0,0,.2)}
   #toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+  /* Mini window: keep only the essentials. */
+  @media (max-width: 600px) {
+    #help, .btxt, kbd, #zoomBtn{display:none}
+    #hud{top:6px;left:6px;right:6px}
+    #left{gap:3px}
+    #right{gap:5px}
+    #money{font-size:16px;padding:2px 10px 2px 3px;gap:5px}
+    #money .coin{width:20px;height:20px;font-size:12px}
+    button{padding:4px 8px;font-size:13px;border-radius:12px}
+    .pill{font-size:9px;padding:2px 7px}
+    #labels .lbl > *{zoom:.7}
+    #toast{font-size:11px;top:44px;padding:6px 12px}
+  }
 </style>
 </head>
 <body>
@@ -88,13 +104,15 @@
 <div id="hud">
   <div id="left">
     <div id="money"><span class="coin">$</span><span id="moneyVal">0</span></div>
-    <div id="shopTag"></div>
+    <div id="shopTag" class="pill"></div>
+    <div id="goalTag" class="pill"></div>
+    <div id="eventTag" class="pill"></div>
   </div>
   <div id="right">
     <button id="zoomBtn" title="Zoom (scroll wheel, - / =)">🔍</button>
     <button id="soundBtn" title="Sound (M)">🔊</button>
-    <button id="shopsBtn">🗺️ Shops<kbd>L</kbd></button>
-    <button id="upBtn">⬆️ Upgrades<kbd>U</kbd></button>
+    <button id="shopsBtn">🗺️<span class="btxt"> Shops</span><kbd>L</kbd></button>
+    <button id="upBtn">⬆️<span class="btxt"> Upgrades</span><kbd>U</kbd></button>
   </div>
 </div>
 <div id="help">WASD / arrows / hold mouse to move · scroll to zoom · walk onto ovens, mats, cash and $ zones · L shops</div>
@@ -160,7 +178,7 @@ const QUEUE_X = 740, QUEUE_Y = 398, QUEUE_GAP = 44, MAX_QUEUE = 8;
 const LEAVE_X = 805, AISLE_X = 880, MID_AISLE_X = 660, DOOR_X = 780, SPAWN = P(740, 850);
 const CAR_X = 42, CAR_Y = 590, CAR_GAP = 100;
 const PILES = { main: P(850, 272), drive: P(230, 730) };
-const COUNTER_MAX = 40, DRIVE_MAX = 30;
+const COUNTER_MAX = 80, DRIVE_MAX = 60;
 const OVEN_POS = { oven1: P(170, 95), oven2: P(300, 95), oven3: P(430, 95), oven4: P(560, 95), oven5: P(690, 95) };
 // aisle: the x where customers walk up and down to reach the table.
 const TABLE_POS = {
@@ -171,6 +189,22 @@ const TABLE_POS = {
   table9: { x: 420, y: 650, aisle: MID_AISLE_X }, table10: { x: 560, y: 650, aisle: MID_AISLE_X },
 };
 const CARRIERS = ['carrier1', 'carrier2', 'carrier3'];
+const ITEMS = {
+  pizza: { icon: '🍕', base: 5 },
+  soda:  { icon: '🥤', base: 3 },
+  cream: { icon: '🍦', base: 8 },
+};
+const ITEM_TYPES = Object.keys(ITEMS);
+// Counter stock per item. Pizza keeps the old save key "counter".
+const STOCK_KEY = { pizza: 'counter', soda: 'soda', cream: 'cream' };
+const COUNTER_CAP = { pizza: COUNTER_MAX, soda: 12, cream: 12 };
+// Drink and dessert stations along the left kitchen wall; w/h is the blocked floor area.
+const STATIONS = {
+  soda:  { x: 125, y: 410, w: 66, h: 60, pick: P(185, 410), bake: 1.8, max: 8 },
+  cream: { x: 121, y: 260, w: 58, h: 70, pick: P(185, 260), bake: 2.6, max: 6 },
+};
+const PATIENCE = 60, VIP_PATIENCE = 80;
+const MANAGER_POST = P(870, 222);
 const WORKER_POST_IDLE = { cleaner: P(1045, 720) };
 
 // Base costs; each location multiplies them by its costMult.
@@ -180,15 +214,19 @@ const UNLOCKS = [
   { id: 'cashier',  cost: 100,   req: 'oven2',    x: 740,  y: 185, icon: '💁', name: 'Cashier' },
   { id: 'table2',   cost: 160,   req: 'cashier',  x: 1110, y: 170, icon: '🪑', name: 'Table' },
   { id: 'carrier1', cost: 250,   req: 'cashier',  x: 470,  y: 260, icon: '🧑‍🍳', name: 'Baker' },
+  { id: 'soda',     cost: 450,   req: 'carrier1', x: 125,  y: 410, icon: '🥤', name: 'Soda' },
   { id: 'table3',   cost: 380,   req: 'table2',   x: 980,  y: 370, icon: '🪑', name: 'Table' },
   { id: 'oven3',    cost: 560,   req: 'carrier1', x: 430,  y: 95,  icon: '🔥', name: 'Oven' },
   { id: 'cleaner',  cost: 800,   req: 'table3',   x: 1045, y: 700, icon: '🧹', name: 'Cleaner' },
   { id: 'table4',   cost: 1150,  req: 'table3',   x: 1110, y: 370, icon: '🪑', name: 'Table' },
   { id: 'drive',    cost: 1600,  req: 'oven3',    x: 175,  y: 565, icon: '🚗', name: 'Drive-Thru' },
+  { id: 'barista',  cost: 2000,  req: 'soda',     x: 300,  y: 420, icon: '☕', name: 'Barista' },
   { id: 'driver',   cost: 2300,  req: 'drive',    x: 260,  y: 640, icon: '🎧', name: 'Drive Clerk' },
   { id: 'table5',   cost: 3200,  req: 'table4',   x: 980,  y: 570, icon: '🪑', name: 'Table' },
   { id: 'carrier2', cost: 4400,  req: 'drive',    x: 380,  y: 260, icon: '🧑‍🍳', name: 'Baker' },
   { id: 'table6',   cost: 6000,  req: 'table5',   x: 1110, y: 570, icon: '🪑', name: 'Table' },
+  { id: 'cream',    cost: 7000,  req: 'table6',   x: 121,  y: 260, icon: '🍦', name: 'Ice Cream' },
+  { id: 'manager',  cost: 12000, req: 'cream',    x: 900,  y: 190, icon: '💼', name: 'Manager' },
   { id: 'oven4',    cost: 8000,  req: 'carrier2', x: 560,  y: 95,  icon: '🔥', name: 'Oven' },
   { id: 'table7',   cost: 10500, req: 'oven4',    x: 420,  y: 480, icon: '🪑', name: 'Table' },
   { id: 'table8',   cost: 13500, req: 'table7',   x: 560,  y: 480, icon: '🪑', name: 'Table' },
@@ -199,7 +237,7 @@ const UNLOCKS = [
 ];
 // Appears in the newest shop after everything there is unlocked.
 const NEW_SHOP = { id: 'newshop', x: 650, y: 728, icon: '🗺️', name: 'New Shop', fixed: 0 };
-const NEXT_SHOP_COST = 15000;
+const NEXT_SHOP_COST = 8000;
 
 // Each location is the same floor plan with a new look and bigger numbers.
 const LOCATIONS = [
@@ -207,19 +245,19 @@ const LOCATIONS = [
     theme: { sky: '#bfe3f2', ground: ['#86cf5e', '60,140,50', '170,230,120'], floor: { kind: 'wood', h: 30, s: 42, l: 66 },
       tile: ['#fbf4e8', '#e8dac4'], wallKind: 'brick', wallHue: 10, wall: '#e7835f', trim: '#fff1dc',
       leaf: '#4fb35a', leaf2: '#62c46a', trunk: '#8a5a3b', cloth: ['#e8473b', '#fff7ef'] } },
-  { name: 'Beach Shack', icon: '🏖️', priceMult: 3, costMult: 6, orderMax: 4, carMult: 1,
+  { name: 'Beach Shack', icon: '🏖️', priceMult: 3, costMult: 5, orderMax: 4, carMult: 1,
     theme: { sky: '#a6e4f7', ground: ['#f1d796', '200,160,90', '255,240,200'], floor: { kind: 'wood', h: 38, s: 30, l: 76 },
       tile: ['#f2fbfa', '#bfe9e4'], wallKind: 'planks', wallColor: '#4fc1bb', wall: '#5fd0c4', trim: '#fffaf0',
       leaf: '#33b56a', leaf2: '#4cd082', trunk: '#b08050', cloth: ['#2fb3e0', '#fffaf0'] } },
-  { name: 'City Diner', icon: '🏙️', priceMult: 9, costMult: 36, orderMax: 4, carMult: 1.6,
+  { name: 'City Diner', icon: '🏙️', priceMult: 9, costMult: 25, orderMax: 4, carMult: 1.6,
     theme: { sky: '#c9d6e3', ground: ['#a7adb5', '80,85,95', '200,205,210'], floor: { kind: 'checker', a: '#f4f4f2', b: '#2e3440' },
       tile: ['#ffffff', '#f2b8b8'], wallKind: 'tiles', wallColor: '#3c6fd1', wall: '#4d7fe0', trim: '#f4f4f2',
       leaf: '#3f9e5a', leaf2: '#56b46e', trunk: '#6b5040', cloth: ['#3c6fd1', '#ffffff'] } },
-  { name: 'Ski Lodge', icon: '🏔️', priceMult: 27, costMult: 216, orderMax: 5, carMult: 1.2,
+  { name: 'Ski Lodge', icon: '🏔️', priceMult: 27, costMult: 125, orderMax: 5, carMult: 1.2,
     theme: { sky: '#dce9f5', ground: ['#f3f7fb', '190,205,220', '255,255,255'], floor: { kind: 'wood', h: 24, s: 45, l: 45 },
       tile: ['#f3ece0', '#dccdb5'], wallKind: 'logs', wallColor: '#8a5a3b', wall: '#9b6a45', trim: '#f3ece0',
       leaf: '#2f7d4f', leaf2: '#3d9461', trunk: '#6b4630', cloth: ['#2f7d4f', '#f3ece0'] } },
-  { name: 'Moon Base', icon: '🚀', priceMult: 81, costMult: 1296, orderMax: 5, carMult: 2,
+  { name: 'Moon Base', icon: '🚀', priceMult: 81, costMult: 625, orderMax: 5, carMult: 2,
     theme: { sky: '#161a33', ground: ['#8d8f99', '60,62,72', '180,182,190'], floor: { kind: 'metal' },
       tile: ['#e3e6ec', '#c5cad3'], wallKind: 'panels', wallColor: '#5b6378', wall: '#6c7590', trim: '#d6dbe6',
       leaf: '#7a7f8c', leaf2: '#9a9fac', trunk: '#5b5f6b', cloth: ['#7a5cff', '#e3e6ec'] } },
@@ -230,7 +268,7 @@ const playerSpeed = l => 170 + 22 * l;
 const carryCap = l => 4 + 2 * l;
 const ovenTime = l => 3 * Math.pow(0.86, l);
 const ovenMax = l => 6 + l;
-const pizzaPrice = l => 5 + 3 * l;
+const pizzaPrice = l => 5 + 4 * l;
 const staffSpeed = l => 120 + 18 * l;
 const staffCap = l => 3 + l;
 const spawnTimeFor = l => 4.5 * Math.pow(0.88, l);
@@ -240,10 +278,10 @@ const UPGRADES = [
     desc: l => `Speed ${playerSpeed(l)}`, next: l => `${playerSpeed(l + 1)}` },
   { id: 'cap', icon: '💪', name: 'Bigger Arms', max: 8, base: 40, mult: 1.75,
     desc: l => `Carry ${carryCap(l)} pizzas`, next: l => `${carryCap(l + 1)}` },
-  { id: 'oven', icon: '🔥', name: 'Hotter Ovens', max: 10, base: 60, mult: 1.7,
+  { id: 'oven', icon: '🔥', name: 'Faster Kitchen', max: 10, base: 60, mult: 1.7,
     desc: l => `Bake ${ovenTime(l).toFixed(1)}s, hold ${ovenMax(l)}`,
     next: l => `${ovenTime(l + 1).toFixed(1)}s, ${ovenMax(l + 1)}` },
-  { id: 'price', icon: '🍕', name: 'Better Recipe', max: 25, base: 80, mult: 1.4,
+  { id: 'price', icon: '🍕', name: 'Better Recipe', max: 30, base: 50, mult: 1.3,
     desc: l => `Pizza sells for $${pizzaPrice(l)}`, next: l => `$${pizzaPrice(l + 1)}` },
   { id: 'cust', icon: '📣', name: 'Word of Mouth', max: 8, base: 120, mult: 1.8,
     desc: l => `Customer every ${spawnTimeFor(l).toFixed(1)}s`, next: l => `${spawnTimeFor(l + 1).toFixed(1)}s` },
@@ -260,16 +298,18 @@ const SAVE_KEY = 'pizza-ready-noads-v1';
 const newShop = () => ({
   unlocked: { oven1: true }, paid: {},
   up: { speed: 0, cap: 0, oven: 0, price: 0, cust: 0, staff: 0 },
-  counter: 0, drive: 0, piles: { main: 0, drive: 0 },
+  counter: 0, drive: 0, soda: 0, cream: 0, piles: { main: 0, drive: 0 },
+  rating: 3, goal: null, goalsDone: 0,
 });
 function freshState() {
-  return { money: 0, earned: 0, sound: true, zoom: 1.2, t: 0, cur: 0, shops: [newShop()] };
+  return { money: 0, earned: 0, runEarned: 0, stars: 0, sound: true, zoom: 1.2, t: 0, cur: 0, shops: [newShop()] };
 }
 function fixShop(d) {
   const sh = newShop();
   sh.unlocked = { ...d.unlocked, oven1: true }; sh.paid = { ...d.paid };
   Object.assign(sh.up, d.up); Object.assign(sh.piles, d.piles);
-  sh.counter = d.counter | 0; sh.drive = d.drive | 0;
+  sh.counter = d.counter | 0; sh.drive = d.drive | 0; sh.soda = d.soda | 0; sh.cream = d.cream | 0;
+  sh.rating = clamp(d.rating ?? 3, 1, 5); sh.goal = d.goal || null; sh.goalsDone = d.goalsDone | 0;
   return sh;
 }
 function loadState() {
@@ -279,7 +319,8 @@ function loadState() {
   if (!raw) return s;
   try {
     const d = JSON.parse(raw);
-    for (const k of ['money', 'earned', 'sound', 'zoom', 't']) if (d[k] !== undefined) s[k] = d[k];
+    for (const k of ['money', 'earned', 'stars', 'sound', 'zoom', 't']) if (d[k] !== undefined) s[k] = d[k];
+    s.runEarned = d.runEarned ?? d.earned ?? 0;
     // Saves from before locations kept a single shop at the top level.
     s.shops = Array.isArray(d.shops) && d.shops.length ? d.shops.map(fixShop) : [fixShop(d)];
     s.shops.length = Math.min(s.shops.length, LOCATIONS.length);
@@ -289,6 +330,8 @@ function loadState() {
 }
 let S = loadState(), L = S.shops[S.cur];
 const loc = () => LOCATIONS[S.cur];
+// Each prestige star adds 10% to all prices.
+const starMult = () => 1 + 0.1 * S.stars;
 function save() {
   S.t = Date.now();
   const data = JSON.stringify(S);
@@ -299,12 +342,13 @@ function save() {
 
 // ================= world =================
 const player = {
-  id: nextId++, x: 600, y: 210, dir: Math.PI / 2, moving: false, stack: 0, actT: 0, seed: 0,
+  id: nextId++, x: 600, y: 210, dir: Math.PI / 2, moving: false, items: [], actT: 0, seed: 0,
   shirt: '#e8473b', skin: '#f6d2b8', hat: 'chef', pants: '#3b3f58',
 };
-const ovens = [], tables = [], workers = [], queue = [], walkers = [], carQueue = [], carsOut = [];
+const ovens = [], stations = [], tables = [], workers = [], queue = [], walkers = [], carQueue = [], carsOut = [];
 const zoneStand = {};
 let spawnT = 1.5, carT = 4, serveT = 0, driveServeT = 0;
+let rushT = rand(240, 420), rushLeft = 0, vipT = rand(150, 260), vipPending = false;
 
 const SHIRTS = ['#ef5b5b', '#4a9df8', '#38c979', '#a66cf0', '#f7c83c', '#f78a3c', '#2ec4b6', '#ff7eb6', '#4f5d75'];
 const SKINS = ['#f6d2b8', '#e8b48a', '#c98d5e', '#8d5a3b', '#ffe0c4'];
@@ -316,33 +360,51 @@ const WORKER_LOOK = {
   carrier: { shirt: '#f78a3c', hat: 'chef', pants: '#3b3f58' },
   cleaner: { shirt: '#38c979', hat: 'cap', hatColor: '#1f9a58', pants: '#2f4b7c' },
   driver:  { shirt: '#a66cf0', hat: 'cap', hatColor: '#6c3fc4', pants: '#3b3f58' },
+  barista: { shirt: '#ff7eb6', hat: 'cap', hatColor: '#e0559a', pants: '#3b3f58' },
+  manager: { shirt: '#3a4255', pants: '#2b2f3a' },
 };
 
 function makeWorker(id) {
   const type = id.startsWith('carrier') ? 'carrier' : id;
   return {
-    id: nextId++, key: id, type, x: DOOR_X, y: 760, dir: -Math.PI / 2, moving: false, stack: 0, actT: 0,
-    state: 'fetch', oven: null, dest: 'counter', table: null,
-    off: { carrier2: 24, carrier3: -24 }[id] || 0, seed: Math.random() * 10,
+    id: nextId++, key: id, type, x: DOOR_X, y: 760, dir: -Math.PI / 2, moving: false, items: [], actT: 0,
+    state: 'fetch', src: null, dest: 'counter', table: null,
+    off: { carrier2: 24, carrier3: -24, barista: 46 }[id] || 0, seed: Math.random() * 10,
     skin: pick(SKINS), hair: pick(HAIRS), ...WORKER_LOOK[type],
   };
 }
 function syncWorld() {
   for (const id in OVEN_POS)
-    if (L.unlocked[id] && !ovens.some(o => o.id === id)) ovens.push({ id, ...OVEN_POS[id], stock: 0, timer: 0 });
+    if (L.unlocked[id] && !ovens.some(o => o.id === id))
+      ovens.push({ id, type: 'pizza', ...OVEN_POS[id], pick: P(OVEN_POS[id].x, OVEN_POS[id].y + 80), stock: 0, timer: 0 });
+  for (const id in STATIONS)
+    if (L.unlocked[id] && !stations.some(o => o.id === id)) stations.push({ id, type: id, ...STATIONS[id], stock: 0, timer: 0 });
   for (const id in TABLE_POS)
     if (L.unlocked[id] && !tables.some(t => t.id === id))
       tables.push({ id, ...TABLE_POS[id], occupant: null, dirty: false, tip: 0, clean: 0 });
-  for (const id of ['cashier', ...CARRIERS, 'cleaner', 'driver'])
+  for (const id of ['cashier', ...CARRIERS, 'cleaner', 'driver', 'barista', 'manager'])
     if (L.unlocked[id] && !workers.some(w => w.key === id)) workers.push(makeWorker(id));
 }
 syncWorld();
 
-const pickPt = o => P(o.x, o.y + 80);
-const price = () => pizzaPrice(L.up.price) * loc().priceMult;
-// More ovens and tables make the shop more popular.
-const spawnTimeOf = (cust, nOvens, nTables) => spawnTimeFor(cust) / (1 + 0.15 * (nOvens - 1) + 0.06 * nTables);
-const spawnTime = () => spawnTimeOf(L.up.cust, ovens.length, tables.length);
+const pickPt = o => o.pick;
+const producers = () => [...ovens, ...stations];
+const bakeTime = o => (STATIONS[o.type]?.bake ?? 3) * Math.pow(0.86, L.up.oven);
+const stockMax = o => (STATIONS[o.type]?.max ?? 6) + L.up.oven;
+const itemPrice = t => ITEMS[t].base * (1 + 0.8 * L.up.price) * loc().priceMult * starMult();
+const price = () => itemPrice('pizza');
+const stockOf = t => L[STOCK_KEY[t]];
+const roomFor = (t, where) => where === 'drive' ? (t === 'pizza' ? DRIVE_MAX - L.drive : 0) : COUNTER_CAP[t] - stockOf(t);
+function putItem(t, where) { if (where === 'drive') L.drive++; else L[STOCK_KEY[t]]++; }
+// Index of the top-most carried item that fits at this drop point, or -1.
+function dropIndex(items, where) {
+  for (let i = items.length - 1; i >= 0; i--) if (roomFor(items[i], where) > 0) return i;
+  return -1;
+}
+// More ovens and tables make the shop more popular; so does a good rating.
+const spawnTimeOf = (cust, nOvens, nTables, rating) =>
+  spawnTimeFor(cust) / (1 + 0.15 * (nOvens - 1) + 0.06 * nTables) / (0.7 + 0.12 * rating);
+const spawnTime = () => spawnTimeOf(L.up.cust, ovens.length, tables.length, L.rating) / (rushLeft > 0 ? 2.5 : 1);
 const carTimeOf = (cust, li) => 11 * Math.pow(0.9, cust) / LOCATIONS[li].carMult;
 const carTime = () => carTimeOf(L.up.cust, S.cur);
 const zoneCost = d => d.fixed || d.cost * loc().costMult;
@@ -363,6 +425,7 @@ const drivePresent = () => L.unlocked.drive && (dist(player, DRIVE_CASHIER) < 42
 function obstacles() {
   const r = [COUNTER];
   for (const o of ovens) r.push({ x: o.x - 50, y: o.y - 35, w: 100, h: 88 });
+  for (const o of stations) r.push({ x: o.x - o.w / 2, y: o.y - o.h / 2, w: o.w, h: o.h });
   for (const t of tables) r.push({ x: t.x - 40, y: t.y - 25, w: 80, h: 48 });
   if (L.unlocked.drive) r.push(DRIVE_COUNTER);
   return r;
@@ -448,9 +511,11 @@ function updateFx(dt) {
 }
 
 // ================= update =================
+function gain(amt) { S.money += amt; S.earned += amt; S.runEarned += amt; }
 function earn(amt, x, y) {
-  S.money += amt; S.earned += amt;
+  gain(amt);
   addFloat(x, y, '+$' + fmt(amt));
+  goalProgress('earn', amt);
 }
 
 function updatePlayer(dt) {
@@ -478,18 +543,16 @@ function updatePlayer(dt) {
   player.actT -= dt;
   const cap = carryCap(L.up.cap);
   if (player.actT <= 0) {
-    for (const o of ovens) {
-      if (o.stock > 0 && player.stack < cap && dist(player, pickPt(o)) < 50) {
-        o.stock--; player.stack++; player.actT = 0.1; sfx.pop(); break;
+    for (const o of producers()) {
+      if (o.stock > 0 && player.items.length < cap && dist(player, o.pick) < 50) {
+        o.stock--; player.items.push(o.type); player.actT = 0.1; sfx.pop(); break;
       }
     }
   }
-  if (player.actT <= 0 && player.stack > 0) {
-    if (dist(player, DROP) < 50 && L.counter < COUNTER_MAX) {
-      L.counter++; player.stack--; player.actT = 0.07; sfx.pop();
-    } else if (L.unlocked.drive && dist(player, DRIVE_DROP) < 50 && L.drive < DRIVE_MAX) {
-      L.drive++; player.stack--; player.actT = 0.07; sfx.pop();
-    }
+  if (player.actT <= 0 && player.items.length) {
+    const where = dist(player, DROP) < 50 ? 'counter' : L.unlocked.drive && dist(player, DRIVE_DROP) < 50 ? 'drive' : null;
+    const i = where ? dropIndex(player.items, where) : -1;
+    if (i >= 0) { putItem(player.items.splice(i, 1)[0], where); player.actT = 0.07; sfx.pop(); }
   }
   // collect cash
   for (const k in PILES) {
@@ -513,14 +576,14 @@ function cleanTable(t, byPlayer) {
   if (byPlayer) { earn(t.tip, t.x, t.y); sfx.cash(); }
   else L.piles.main += t.tip;
   t.dirty = false; t.clean = 0; t.tip = 0;
+  goalProgress('clean', 1);
 }
 
-function updateOvens(dt) {
-  const max = ovenMax(L.up.oven), bake = ovenTime(L.up.oven);
-  for (const o of ovens) {
-    if (o.stock >= max) { o.timer = 0; continue; }
+function updateProducers(dt) {
+  for (const o of producers()) {
+    if (o.stock >= stockMax(o)) { o.timer = 0; continue; }
     o.timer += dt;
-    if (o.timer >= bake) { o.timer = 0; o.stock++; }
+    if (o.timer >= bakeTime(o)) { o.timer = 0; o.stock++; }
   }
 }
 
@@ -530,34 +593,53 @@ function updateWorkers(dt) {
     w.actT -= dt;
     if (w.type === 'cashier') { if (moveTo(w, CASHIER.x, CASHIER.y, sp, dt)) w.dir = Math.PI / 2; }
     else if (w.type === 'driver') { if (moveTo(w, DRIVE_CASHIER.x, DRIVE_CASHIER.y, sp, dt)) w.dir = Math.PI; }
-    else if (w.type === 'carrier') updateCarrier(w, sp, dt);
+    else if (w.type === 'carrier') updateCarrier(w, sp, dt, ovens);
+    else if (w.type === 'barista') updateCarrier(w, sp, dt, stations);
     else if (w.type === 'cleaner') updateCleaner(w, sp, dt);
+    else if (w.type === 'manager') updateManager(w, sp, dt);
   }
 }
 
-function updateCarrier(w, sp, dt) {
+// Carries items from the given sources (ovens or stations) to the counter or the drive-thru.
+function updateCarrier(w, sp, dt, sources) {
   const cap = staffCap(L.up.staff);
-  const anyStock = ovens.some(o => o.stock > 0);
+  const ready = sources.filter(o => o.stock > 0);
+  const need = o => roomFor(o.type, 'counter') / COUNTER_CAP[o.type];
   if (w.state === 'fetch') {
-    if (w.stack >= cap || (w.stack > 0 && !anyStock)) {
+    if (w.items.length >= cap || (w.items.length && !ready.length)) {
       w.state = 'deliver';
-      w.dest = L.unlocked.drive && L.drive < L.counter ? 'drive' : 'counter';
+      w.dest = w.type === 'carrier' && L.unlocked.drive && L.drive < L.counter ? 'drive' : 'counter';
       return;
     }
-    if (!w.oven || (w.oven.stock === 0 && anyStock))
-      w.oven = ovens.reduce((b, o) => (o.stock > b.stock || (o.stock === b.stock && o.timer > b.timer)) ? o : b, ovens[0]);
-    const p = pickPt(w.oven);
+    if (!w.src || (w.src.stock === 0 && ready.length))
+      w.src = (ready.length ? ready : sources).reduce((b, o) =>
+        need(o) > need(b) || (need(o) === need(b) && (o.stock > b.stock || (o.stock === b.stock && o.timer > b.timer))) ? o : b);
+    const p = w.src.pick;
     if (moveTo(w, p.x + w.off, p.y, sp, dt)) {
-      w.dir = -Math.PI / 2;
-      if (w.oven.stock > 0 && w.actT <= 0) { w.oven.stock--; w.stack++; w.actT = 0.18; }
+      w.dir = w.src.type === 'pizza' ? -Math.PI / 2 : Math.PI;
+      if (w.src.stock > 0 && w.actT <= 0) { w.src.stock--; w.items.push(w.src.type); w.actT = 0.18; }
     }
   } else {
     const d = w.dest === 'drive' ? DRIVE_DROP : DROP;
     if (moveTo(w, d.x + w.off, d.y, sp, dt) && w.actT <= 0) {
-      if (w.dest === 'drive' && L.drive < DRIVE_MAX) { L.drive++; w.stack--; w.actT = 0.1; }
-      else if (w.dest === 'counter' && L.counter < COUNTER_MAX) { L.counter++; w.stack--; w.actT = 0.1; }
-      if (w.stack <= 0) { w.stack = 0; w.state = 'fetch'; w.oven = null; }
+      const i = dropIndex(w.items, w.dest);
+      if (i >= 0) { putItem(w.items.splice(i, 1)[0], w.dest); w.actT = 0.1; }
+      if (!w.items.length) { w.state = 'fetch'; w.src = null; }
     }
+  }
+}
+
+// Banks every cash pile every few seconds.
+function updateManager(w, sp, dt) {
+  if (!moveTo(w, MANAGER_POST.x, MANAGER_POST.y, sp, dt)) return;
+  w.dir = Math.PI / 2;
+  if (w.actT > 0) return;
+  w.actT = 3;
+  for (const k in PILES) {
+    if (L.piles[k] <= 0) continue;
+    const amt = L.piles[k]; L.piles[k] = 0;
+    earn(amt, w.x, w.y);
+    addCoins(PILES[k].x, PILES[k].y - 10, w, Math.min(8, 2 + Math.floor(amt / 40)));
   }
 }
 
@@ -572,21 +654,36 @@ function updateCleaner(w, sp, dt) {
   }
 }
 
+function makeOrder(vip) {
+  const o = { pizza: randi(1, loc().orderMax) + (vip ? 3 : 0), soda: 0, cream: 0 };
+  if (L.unlocked.soda && Math.random() < 0.6) o.soda = randi(1, 2) + (vip ? 1 : 0);
+  if (L.unlocked.cream && Math.random() < 0.45) o.cream = 1 + (vip ? 1 : 0);
+  return o;
+}
+const orderSize = o => o.pizza + o.soda + o.cream;
+const orderLeft = c => ITEM_TYPES.some(t => c.got[t] < c.order[t]);
+
 function spawnCustomer() {
+  const vip = vipPending;
+  vipPending = false;
   queue.push({
     id: nextId++, x: SPAWN.x + rand(-8, 8), y: SPAWN.y, dir: -Math.PI / 2, moving: true,
-    order: randi(1, loc().orderMax), got: 0, stack: 0, dine: Math.random() < 0.65,
+    order: makeOrder(vip), got: { pizza: 0, soda: 0, cream: 0 }, items: [], vip,
+    patience: vip ? VIP_PATIENCE : PATIENCE, dine: Math.random() < 0.65,
     state: 'queue', path: [], next: null, table: null, timer: 0, seed: Math.random() * 10,
-    shirt: pick(SHIRTS), skin: pick(SKINS), hair: pick(HAIRS), pants: pick(PANTS), hairStyle: randi(0, 2),
+    shirt: vip ? '#f5c242' : pick(SHIRTS), skin: pick(SKINS), hair: pick(HAIRS), pants: pick(PANTS), hairStyle: randi(0, 2),
   });
 }
 
 function finishOrder(c) {
   queue.shift();
-  const pay = c.order * price();
+  const pay = Math.round(ITEM_TYPES.reduce((a, t) => a + c.order[t] * itemPrice(t), 0) * (c.vip ? 3 : 1));
   L.piles.main += pay;
-  addFloat(QUEUE_X, QUEUE_Y, '$' + fmt(pay), 'gold');
-  c.stack = c.order; c.state = 'walk';
+  addFloat(QUEUE_X, QUEUE_Y, (c.vip ? '👑 $' : '$') + fmt(pay), 'gold');
+  L.rating = Math.min(5, L.rating + (c.vip ? 0.15 : 0.03));
+  goalProgress('serve', 1);
+  c.items = ITEM_TYPES.flatMap(t => Array(c.order[t]).fill(t));
+  c.state = 'walk';
   const t = c.dine ? tables.find(t => !t.occupant && !t.dirty) : null;
   if (t) {
     t.occupant = c; c.table = t; c.next = 'eat';
@@ -599,6 +696,16 @@ function finishOrder(c) {
   walkers.push(c);
 }
 
+function leaveAngry(c, i) {
+  queue.splice(i, 1);
+  for (const t of ITEM_TYPES) L[STOCK_KEY[t]] = Math.min(COUNTER_CAP[t], stockOf(t) + c.got[t]);
+  L.rating = Math.max(1, L.rating - 0.2);
+  c.angry = true; c.state = 'walk'; c.next = 'gone';
+  c.path = [P(LEAVE_X, c.y + 10), P(LEAVE_X, 860)];
+  addFloat(c.x, c.y, '😡 left');
+  walkers.push(c);
+}
+
 function updateCustomers(dt) {
   spawnT -= dt;
   if (spawnT <= 0) {
@@ -606,11 +713,22 @@ function updateCustomers(dt) {
     if (queue.length < MAX_QUEUE) spawnCustomer();
   }
   queue.forEach((c, i) => moveTo(c, QUEUE_X, QUEUE_Y + i * QUEUE_GAP, 110, dt));
+  const canServe = c => c.x === QUEUE_X && c.y === QUEUE_Y && cashierPresent();
+  // Waiting customers lose patience, except while the front one is actively being served.
+  for (let i = queue.length - 1; i >= 0; i--) {
+    const c = queue[i];
+    const busy = i === 0 && canServe(c) && ITEM_TYPES.some(t => c.got[t] < c.order[t] && stockOf(t) > 0);
+    if (!busy) c.patience -= dt;
+    if (c.patience <= 0) leaveAngry(c, i);
+  }
   const f = queue[0];
-  if (f && f.x === QUEUE_X && f.y === QUEUE_Y && cashierPresent()) {
+  if (f && canServe(f)) {
     serveT -= dt;
-    if (serveT <= 0 && f.got < f.order && L.counter > 0) { L.counter--; f.got++; serveT = 0.22; }
-    if (f.got >= f.order) finishOrder(f);
+    if (serveT <= 0) {
+      const t = ITEM_TYPES.find(t => f.got[t] < f.order[t] && stockOf(t) > 0);
+      if (t) { L[STOCK_KEY[t]]--; f.got[t]++; serveT = 0.22; }
+    }
+    if (!orderLeft(f)) finishOrder(f);
   }
   for (let i = walkers.length - 1; i >= 0; i--) {
     const c = walkers[i];
@@ -618,16 +736,58 @@ function updateCustomers(dt) {
       c.timer -= dt;
       if (c.timer <= 0) {
         const t = c.table;
-        t.occupant = null; t.dirty = true; t.tip = Math.round(price() * c.order * 0.5) + 2;
+        t.occupant = null; t.dirty = true; t.tip = Math.round(price() * orderSize(c.order) * 0.5 * (c.vip ? 3 : 1)) + 2;
         c.table = null; c.state = 'walk'; c.next = 'gone';
         c.path = [P(t.x, t.y + 80), P(t.aisle, t.y + 80), P(t.aisle, 740), P(LEAVE_X, 760), P(LEAVE_X, 860)];
       }
       continue;
     }
     if (c.path.length) { const p = c.path[0]; if (moveTo(c, p.x, p.y, 110, dt)) c.path.shift(); }
-    else if (c.next === 'eat') { c.state = 'eat'; c.timer = rand(6, 10); c.eatTotal = c.timer; c.stack = 0; c.dir = -Math.PI / 2; c.moving = false; }
+    else if (c.next === 'eat') { c.state = 'eat'; c.timer = rand(6, 10); c.eatTotal = c.timer; c.items = []; c.dir = -Math.PI / 2; c.moving = false; }
     else walkers.splice(i, 1);
   }
+}
+
+// Rush hours and VIP visits, once the shop has a cashier.
+function updateEvents(dt) {
+  if (!L.unlocked.cashier) return;
+  if (rushLeft > 0) {
+    rushLeft -= dt;
+    if (rushLeft <= 0) toast('Rush hour is over. Nice work!');
+  } else if ((rushT -= dt) <= 0) {
+    rushT = rand(240, 420); rushLeft = 45; spawnT = 0;
+    toast('🔥 Rush hour! Lots of customers for 45 seconds', 4);
+  }
+  if ((vipT -= dt) <= 0) {
+    vipT = rand(150, 260); vipPending = true; spawnT = Math.min(spawnT, 0.5);
+    toast('👑 A VIP is on the way: big order, 3× pay', 4);
+  }
+}
+
+// ---- goals ----
+const GOAL_TEXT = {
+  serve: n => `Serve ${n} customers`, clean: n => `Clean ${n} tables`,
+  drive: n => `Serve ${n} drive-thru cars`, earn: n => `Collect $${fmt(n)}`,
+};
+function newGoal() {
+  const types = ['serve', 'earn'];
+  if (L.unlocked.table1) types.push('clean');
+  if (L.unlocked.drive) types.push('drive');
+  const n = L.goalsDone, type = types[n % types.length];
+  const target = { serve: 10 + 5 * n, clean: 5 + 3 * n, drive: 4 + 2 * n, earn: Math.round(price() * (40 + 25 * n)) }[type];
+  L.goal = { type, target, progress: 0, reward: Math.round(price() * (12 + 6 * n)) };
+}
+function goalProgress(type, amt) {
+  const g = L.goal;
+  if (!g || g.type !== type) return;
+  g.progress += amt;
+  if (g.progress < g.target) return;
+  L.goalsDone++;
+  gain(g.reward);
+  addFloat(player.x, player.y, '🎯 +$' + fmt(g.reward), 'gold');
+  confetti(player.x, player.y); sfx.unlock();
+  toast(`🎯 Goal done: ${GOAL_TEXT[g.type](g.target)}! +$${fmt(g.reward)}`);
+  newGoal();
 }
 
 function updateCars(dt) {
@@ -648,6 +808,7 @@ function updateCars(dt) {
       const pay = Math.round(f.order * price() * 1.5);
       L.piles.drive += pay;
       addFloat(CAR_X, CAR_Y, '$' + fmt(pay), 'gold');
+      goalProgress('drive', 1);
       carsOut.push(f);
     }
   }
@@ -686,10 +847,11 @@ function unlock(d) {
 function goToShop(i) {
   save();
   S.cur = i; L = S.shops[i];
-  for (const a of [ovens, tables, workers, queue, walkers, carQueue, carsOut, fx]) a.length = 0;
-  Object.assign(player, { x: 600, y: 210, stack: 0, dir: Math.PI / 2, moving: false });
-  spawnT = 1.5; carT = 4;
+  for (const a of [ovens, stations, tables, workers, queue, walkers, carQueue, carsOut, fx]) a.length = 0;
+  Object.assign(player, { x: 600, y: 210, items: [], dir: Math.PI / 2, moving: false });
+  spawnT = 1.5; carT = 4; rushLeft = 0; vipPending = false;
   syncWorld();
+  if (!L.goal) newGoal();
   resetScene();
   toast(`${loc().icon} Welcome to ${loc().name}!`);
   save();
@@ -699,9 +861,10 @@ function update(dt) {
   time += dt;
   // Other shops keep running in the background at their idle rate.
   const bg = otherShopsRate();
-  S.money += bg * dt; S.earned += bg * dt;
+  gain(bg * dt);
+  updateEvents(dt);
   updatePlayer(dt);
-  updateOvens(dt);
+  updateProducers(dt);
   updateWorkers(dt);
   updateCustomers(dt);
   updateCars(dt);
@@ -717,17 +880,30 @@ function idleRateFor(sh, li) {
   const nTables = Object.keys(TABLE_POS).filter(id => u[id]).length;
   const prod = nOvens / ovenTime(sh.up.oven);
   const drive = u.drive && u.driver ? 4.5 / carTimeOf(sh.up.cust, li) : 0;
-  const demand = (1 + lc.orderMax) / 2 / spawnTimeOf(sh.up.cust, nOvens, nTables) + drive;
+  const demand = (1 + lc.orderMax) / 2 / spawnTimeOf(sh.up.cust, nOvens, nTables, sh.rating) + drive;
   const haul = CARRIERS.filter(id => u[id]).length * staffCap(sh.up.staff) / 7;
-  return Math.min(prod, demand, haul) * pizzaPrice(sh.up.price) * lc.priceMult * 0.5;
+  const extras = 1 + (u.barista ? (u.soda ? 0.35 : 0) + (u.cream ? 0.3 : 0) : 0);
+  return Math.min(prod, demand, haul) * pizzaPrice(sh.up.price) * lc.priceMult * starMult() * extras * 0.5;
 }
 const idleRate = () => S.shops.reduce((a, sh, i) => a + idleRateFor(sh, i), 0);
 const otherShopsRate = () => S.shops.reduce((a, sh, i) => i === S.cur ? a : a + idleRateFor(sh, i), 0);
+
+// ---- prestige ----
+const starsToGain = () => Math.floor(Math.sqrt(S.runEarned / 200000));
+function sellFranchise() {
+  const n = starsToGain();
+  if (S.shops.length < 2 || n < 1) return;
+  if (!confirm(`Sell the franchise? All shops and money reset. You get ${n} 🏆 (+${n * 10}% income forever).`)) return;
+  S.stars += n; S.money = 0; S.runEarned = 0;
+  S.shops = [newShop()];
+  goToShop(0);
+  toast(`🏆 Franchise sold! You have ${S.stars} 🏆: +${S.stars * 10}% income`, 5);
+}
 function creditAway(sec) {
   sec = Math.min(sec, 8 * 3600);
   const amt = Math.floor(idleRate() * sec);
   if (amt > 0) {
-    S.money += amt; S.earned += amt; sfx.cash();
+    gain(amt); sfx.cash();
     toast(`👋 While you were away (${fmtDur(sec)}), your staff earned $${fmt(amt)}`, 5);
   }
 }
@@ -1098,6 +1274,27 @@ function makeOvenObj() {
   return { root, fire, ember, light };
 }
 
+function makeSodaObj() {
+  const root = new THREE.Group();
+  add(root, gBox(1.3, 1.6, 1.4, 0.1), '#e8473b', 0, 0.8, 0);
+  add(root, gBox(0.06, 0.6, 1.05, 0.02), '#ffffff', 0.66, 1.15, 0);
+  add(root, gBox(0.1, 0.32, 0.7, 0.03), '#3a3f4b', 0.66, 0.62, 0);
+  for (const dz of [-0.2, 0.2]) add(root, gCyl(0.04, 0.04, 0.14, 8), '#c9ccd1', 0.68, 0.48, dz);
+  add(root, gBox(0.62, 0.06, 1.3, 0.02), '#c9ccd1', 0.95, 0.42, 0);
+  const sign = add(root, new THREE.PlaneGeometry(0.9, 0.42), decalMat(canvasTex(128, 64, (c, w, h) => {
+    c.textAlign = 'center'; c.textBaseline = 'middle'; c.font = `40px ${UI_FONT}`; c.fillText('🥤', w / 2, h / 2 + 2);
+  })), 0.7, 1.15, 0, false);
+  sign.rotation.y = Math.PI / 2;
+  return { root };
+}
+function makeCreamObj() {
+  const root = new THREE.Group();
+  add(root, gBox(1.25, 0.85, 1.6, 0.1), '#e9f6ff', 0, 0.425, 0);
+  add(root, gBox(1.1, 0.06, 1.45, 0.03), M('#a8dcf5', { roughness: 0.15, metalness: 0.1 }), 0, 0.87, 0);
+  add(root, gBox(0.06, 0.3, 1.2, 0.02), '#ff9ec4', 0.63, 0.5, 0);
+  return { root };
+}
+
 function makeTableObj() {
   const root = new THREE.Group();
   const cloth = new THREE.MeshStandardMaterial({ map: TEX.cloth, roughness: 0.9 });
@@ -1159,6 +1356,11 @@ function makePersonObj(e) {
     hair.rotation.x = -0.35;
     if (e.hairStyle === 1) add(head, gSph(0.13, 10, 8), e.hair, 0, 0.12, -0.3);
     if (e.hairStyle === 2) add(head, gCap(0.11, 0.25), e.hair, 0, -0.18, -0.26);
+  }
+  if (e.vip) {
+    const gold = M('#f5c242', { metalness: 0.6, roughness: 0.3, side: THREE.DoubleSide });
+    add(head, G('crownBand', () => new THREE.CylinderGeometry(0.2, 0.2, 0.12, 16, 1, true)), gold, 0, 0.36, 0);
+    for (let i = 0; i < 5; i++) { const a = i / 5 * Math.PI * 2; add(head, gCyl(0, 0.05, 0.13, 6), gold, Math.cos(a) * 0.18, 0.48, Math.sin(a) * 0.18); }
   }
   root.scale.setScalar(1);
   return { root, body, legL, legR, armL, armR, baseScale: 1, rot: Math.PI / 2 - (e.dir ?? 0) };
@@ -1227,7 +1429,7 @@ function makeMat(p, label, icon, color) {
 makeMat(DROP, 'DROP', '📦', '#d9822b');
 makeMat(CASHIER, 'SERVE', '💁', '#2f7fd8');
 const driveMats = [makeMat(DRIVE_DROP, 'DROP', '📦', '#d9822b'), makeMat(DRIVE_CASHIER, 'SERVE', '💁', '#2f7fd8')];
-const ovenMats = {};
+const ovenMats = {}, stationMats = {};
 
 // player ring and guide arrow
 const playerRing = new THREE.Mesh(new THREE.RingGeometry(0.5, 0.62, 40), new THREE.MeshBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0.7, depthWrite: false }));
@@ -1270,6 +1472,16 @@ function pushInst(im, x, y, z, ry = 0, rx = 0, rz = 0) {
   im.setMatrixAt(im.count++, tmpM);
 }
 const BOX_H = 0.145;
+const cupIM = instanced(new THREE.CylinderGeometry(0.15, 0.11, 0.3, 14), [M('#e8473b'), M('#ffffff'), M('#ffffff')], 600);
+const coneIM = instanced(new THREE.CylinderGeometry(0.13, 0.025, 0.26, 12), M('#d9a35b'), 600);
+const scoopIM = instanced(new THREE.SphereGeometry(0.15, 12, 10), M('#ff9ec4'), 600);
+const ITEM_H = { pizza: BOX_H, soda: 0.3, cream: 0.4 };
+// Draws one item standing on height y.
+function pushItem(t, x, y, z, r = 0) {
+  if (t === 'pizza') pushInst(boxIM, x, y + 0.065, z, r);
+  else if (t === 'soda') pushInst(cupIM, x, y + 0.15, z, r);
+  else { pushInst(coneIM, x, y + 0.13, z, r); pushInst(scoopIM, x, y + 0.3, z, r); }
+}
 
 // ---- world labels (HTML on top of the canvas) ----
 const labelLayer = document.getElementById('labels');
@@ -1341,7 +1553,7 @@ function animPerson(e, dt) {
   o.rot = lerpAngle(o.rot, Math.PI / 2 - e.dir, 1 - Math.exp(-dt * 14));
   r.rotation.y = o.rot;
   if (e.moving) o.phase = (o.phase || 0) + dt * 11;
-  const sit = e.state === 'eat', carrying = e.stack > 0;
+  const sit = e.state === 'eat', carrying = e.items.length > 0;
   const swing = e.moving ? Math.sin(o.phase) * 0.7 : 0;
   o.legL.rotation.x = sit ? -1.45 : swing;
   o.legR.rotation.x = sit ? -1.45 : -swing;
@@ -1349,15 +1561,15 @@ function animPerson(e, dt) {
   o.armR.rotation.x = carrying ? -1.3 : sit ? -0.5 : swing * 0.8;
   o.body.position.y = (sit ? 0.06 : 0) + (e.moving ? Math.abs(Math.sin(o.phase)) * 0.07 : Math.sin(time * 2.5 + (e.seed || 0)) * 0.012);
   if (carrying) {
-    const s = 1, fx = Math.sin(o.rot), fz = Math.cos(o.rot);
-    for (let i = 0; i < e.stack; i++)
-      pushInst(boxIM, r.position.x + fx * 0.5 * s, (0.98 + o.body.position.y) * s + i * BOX_H, r.position.z + fz * 0.5 * s, o.rot);
+    const fx = Math.sin(o.rot), fz = Math.cos(o.rot);
+    let y = 0.915 + o.body.position.y;
+    for (const t of e.items) { pushItem(t, r.position.x + fx * 0.5, y, r.position.z + fz * 0.5, o.rot); y += ITEM_H[t]; }
   }
 }
 
 function syncScene(dt) {
   syncFrame++;
-  boxIM.count = billIM.count = coinIM.count = confIM.count = 0;
+  boxIM.count = billIM.count = coinIM.count = confIM.count = cupIM.count = coneIM.count = scoopIM.count = 0;
   const max = ovenMax(L.up.oven);
 
   for (const k in ovenMats) ovenMats[k].visible = false;
@@ -1372,14 +1584,34 @@ function syncScene(dt) {
     for (let i = 0; i < o.stock; i++) pushInst(boxIM, x + (i < 8 ? -0.37 : 0.37), 0.85 + 0.065 + BOX_H * (i % 8), z + 1.25, (i % 3 - 1) * 0.04);
     if (!ovenMats[o.id]) ovenMats[o.id] = makeMat(pickPt(o), 'PICK UP', '🍕', '#ffffff');
     ovenMats[o.id].visible = true;
-    const pct = Math.round(o.timer / ovenTime(L.up.oven) * 100);
+    const pct = Math.round(o.timer / bakeTime(o) * 100);
     label('oven' + o.id, x, 2.75, z, o.stock >= max ? '<span class="tag">FULL</span>' : `<div class="bar"><i style="width:${pct}%"></i></div>`);
+  }
+
+  for (const k in stationMats) stationMats[k].visible = false;
+  for (const o of stations) {
+    const ob = objFor(o, o.type === 'soda' ? makeSodaObj : makeCreamObj);
+    popScale(ob);
+    const x = X(o.x), z = Z(o.y);
+    ob.root.position.set(x, 0, z);
+    if (o.type === 'soda') for (let i = 0; i < o.stock; i++) pushItem('soda', x + 0.95, 0.45 + Math.floor(i / 3) * 0.3, z + (i % 3 - 1) * 0.4);
+    else for (let i = 0; i < o.stock; i++) pushItem('cream', x + (Math.floor(i / 4) % 2 ? 0.25 : -0.25), 0.9 + Math.floor(i / 8) * 0.4, z + (i % 4 - 1.5) * 0.36);
+    if (!stationMats[o.id]) stationMats[o.id] = makeMat(o.pick, 'PICK UP', ITEMS[o.type].icon, '#ffffff');
+    stationMats[o.id].visible = true;
+    const pct = Math.round(o.timer / bakeTime(o) * 100);
+    label('st' + o.id, x, 2.3, z, o.stock >= stockMax(o) ? '<span class="tag">FULL</span>' : `<div class="bar"><i style="width:${pct}%"></i></div>`);
   }
 
   // counter stock
   const cz = Z(COUNTER.y + COUNTER.h / 2);
-  for (let i = 0; i < L.counter; i++) pushInst(boxIM, X(COUNTER.x + 24 + Math.floor(i / 10) * 28), 1.06 + 0.065 + BOX_H * (i % 10), cz, (i % 3 - 1) * 0.05);
-  if (L.counter >= COUNTER_MAX) label('cfull', X(COUNTER.x + 66), 2.9, cz, '<span class="tag">FULL</span>');
+  // Pizza: 4 columns x 2 rows x 10 high. Soda and dessert: 3 slots per layer.
+  for (let i = 0; i < L.counter; i++) {
+    const col = Math.floor(i / 10) % 4, row = Math.floor(i / 40);
+    pushInst(boxIM, X(COUNTER.x + 24 + col * 28), 1.06 + 0.065 + BOX_H * (i % 10), cz + (row ? 0.33 : -0.33), (i % 3 - 1) * 0.05);
+  }
+  for (let i = 0; i < L.soda; i++) pushItem('soda', X(676), 1.06 + Math.floor(i / 3) * 0.3, cz + (i % 3 - 1) * 0.4);
+  for (let i = 0; i < L.cream; i++) pushItem('cream', X(704), 1.06 + Math.floor(i / 3) * 0.4, cz + (i % 3 - 1) * 0.4);
+  if (L.counter >= COUNTER_MAX) label('cfull', X(COUNTER.x + 66), 3.0, cz, '<span class="tag">FULL</span>');
 
   // drive-thru
   const driveOn = !!L.unlocked.drive;
@@ -1389,8 +1621,11 @@ function syncScene(dt) {
   driveMats.forEach(m => { m.visible = driveOn; });
   if (driveOn) {
     driveCounter.scale.setScalar(Math.max(0.001, easeOutBack(clamp((time - driveCounter.userData.born) / 0.45, 0, 1))));
-    for (let i = 0; i < L.drive; i++)
-      pushInst(boxIM, driveCounter.position.x, 1.06 + 0.065 + BOX_H * (i % 10), Z(DRIVE_COUNTER.y + 22) + Math.floor(i / 10) * 0.72, Math.PI / 2);
+    // 3 stacks along the counter x 2 rows x 10 high.
+    for (let i = 0; i < L.drive; i++) {
+      const col = Math.floor(i / 10) % 3, row = Math.floor(i / 30);
+      pushInst(boxIM, driveCounter.position.x + (row ? 0.3 : -0.3), 1.06 + 0.065 + BOX_H * (i % 10), Z(DRIVE_COUNTER.y + 22) + col * 0.72, Math.PI / 2);
+    }
   }
 
   // tables
@@ -1414,7 +1649,8 @@ function syncScene(dt) {
   for (const c of walkers) animPerson(c, dt);
   playerRing.position.set(X(player.x), 0.012, Z(player.y));
   const cap = carryCap(L.up.cap);
-  if (player.stack >= cap) label('max', X(player.x), 1.75 + cap * BOX_H, Z(player.y), '<span class="tag">MAX</span>');
+  if (player.items.length >= cap)
+    label('max', X(player.x), 1.3 + player.items.reduce((a, t) => a + ITEM_H[t], 0), Z(player.y), '<span class="tag">MAX</span>');
 
   // cars
   for (const c of [...carQueue, ...carsOut]) objFor(c, makeCarObj).root.position.set(X(c.x), 0, Z(c.y));
@@ -1440,8 +1676,13 @@ function syncScene(dt) {
 
   // bubbles and hints
   const f = queue[0];
-  if (f && f.x === QUEUE_X && f.y === QUEUE_Y)
-    label('bub' + f.id, X(f.x), 2.35, Z(f.y), `<div class="bubble">🍕 ${f.got}/${f.order}</div>`);
+  if (f && f.x === QUEUE_X && f.y === QUEUE_Y) label('bub' + f.id, X(f.x), 2.35, Z(f.y), orderHtml(f));
+  for (let i = 1; i < queue.length; i++) {
+    const c = queue[i];
+    if (c.vip) label('vip' + c.id, X(c.x), 2.3, Z(c.y), '<div class="icon">👑</div>');
+    else if (c.patience < PATIENCE * 0.35) label('mad' + c.id, X(c.x), 2.3, Z(c.y), '<div class="icon">😠</div>');
+  }
+  for (const c of walkers) if (c.angry) label('mad' + c.id, X(c.x), 2.3, Z(c.y), '<div class="icon">😡</div>');
   const fc = carQueue[0];
   if (fc && fc.y === CAR_Y) label('car' + fc.id, X(fc.x), 2.1, Z(fc.y), `<div class="bubble">🍕 ${fc.got}/${fc.order}</div>`);
   if (f && f.y === QUEUE_Y && !cashierPresent() && L.counter > 0) label('alert', X(CASHIER.x), 1.4, Z(CASHIER.y), '<div class="alert">!</div>');
@@ -1471,7 +1712,7 @@ function syncScene(dt) {
     }
   }
 
-  for (const im of [boxIM, billIM, coinIM, confIM]) im.instanceMatrix.needsUpdate = true;
+  for (const im of [boxIM, billIM, coinIM, confIM, cupIM, coneIM, scoopIM]) im.instanceMatrix.needsUpdate = true;
   if (confIM.instanceColor) confIM.instanceColor.needsUpdate = true;
 
   // remove objects whose entity is gone
@@ -1479,9 +1720,17 @@ function syncScene(dt) {
   firstSync = false;
 }
 
+function orderHtml(c) {
+  const parts = ITEM_TYPES.filter(t => c.order[t] > 0).map(t => `${ITEMS[t].icon} ${c.got[t]}/${c.order[t]}`);
+  const p = clamp(c.patience / (c.vip ? VIP_PATIENCE : PATIENCE), 0, 1);
+  const color = p > 0.5 ? '#38c979' : p > 0.25 ? '#f7a531' : '#ef5b5b';
+  return `<div class="bubble${c.vip ? ' vip' : ''}">${c.vip ? '👑 ' : ''}${parts.join(' &nbsp;')}` +
+    `<div class="pat"><i style="width:${Math.round(p * 100)}%;background:${color}"></i></div></div>`;
+}
+
 function guideTarget() {
   if (L.unlocked.carrier1) return null;
-  if (player.stack > 0) return DROP;
+  if (player.items.length) return DROP;
   if (queue[0] && L.counter > 0) return CASHIER;
   if (L.piles.main > 0) return PILES.main;
   const z = visibleZones().find(d => S.money >= zoneCost(d) - (L.paid[d.id] || 0));
@@ -1543,13 +1792,24 @@ function refreshShops() {
     return `<div class="row"><div class="ic">${known ? lc.icon : '❔'}</div>
       <div class="tx"><div class="nm">${known ? lc.name : '???'}</div><div class="ds">${info}</div>
       ${known ? `<div class="ds">Pizza prices ×${lc.priceMult}</div>` : ''}</div>${btn}</div>`;
-  }).join('');
+  }).join('') + franchiseHtml();
   if (shopList._html !== html) { shopList.innerHTML = html; shopList._html = html; }
 }
 shopList.addEventListener('click', e => {
-  const i = e.target.closest('button')?.dataset.shop;
-  if (i !== undefined) { toggleShops(false); goToShop(+i); }
+  const b = e.target.closest('button');
+  if (!b) return;
+  if (b.dataset.sell) { toggleShops(false); sellFranchise(); }
+  else if (b.dataset.shop !== undefined) { toggleShops(false); goToShop(+b.dataset.shop); }
 });
+function franchiseHtml() {
+  const n = starsToGain(), can = S.shops.length >= 2 && n >= 1;
+  const why = S.shops.length < 2 ? ' · open a second shop first'
+    : n < 1 ? ` · earn $${fmt(200000 - S.runEarned)} more` : '';
+  return `<div class="row"><div class="ic">🏆</div><div class="tx"><div class="nm">Sell Franchise</div>
+    <div class="ds">Reset all shops and money for ${n} 🏆. Each 🏆 adds +10% income forever.</div>
+    <div class="ds">You have ${S.stars} 🏆 (+${S.stars * 10}%)${why}</div></div>
+    <button data-sell="1" ${can ? '' : 'disabled'}>Sell</button></div>`;
+}
 function toggleShops(open = shopsPanel.hidden) {
   shopsPanel.hidden = !open;
   if (open) { panel.hidden = true; refreshShops(); }
@@ -1570,13 +1830,28 @@ document.getElementById('resetBtn').onclick = () => {
 soundBtn.textContent = S.sound ? '🔊' : '🔇';
 
 let panelT = 0;
-const shopTag = document.getElementById('shopTag');
+const shopTag = document.getElementById('shopTag'), goalTag = document.getElementById('goalTag'), eventTag = document.getElementById('eventTag');
+let badgeT = 0, lastBadge = null;
 function hud(dt) {
   const m = Math.floor(S.money);
   if (m !== shownMoney) { moneyEl.textContent = fmt(m); shownMoney = m; }
   const bg = otherShopsRate();
-  const tag = S.shops.length > 1 ? `${loc().icon} ${loc().name}` + (bg > 0 ? ` · +$${fmt(bg)}/s from other shops` : '') : '';
+  const tag = `${loc().icon} ${loc().name} · ⭐ ${L.rating.toFixed(1)}` + (S.stars ? ` · 🏆 ${S.stars}` : '') +
+    (bg > 0 ? ` · +$${fmt(bg)}/s from other shops` : '');
   if (shopTag.textContent !== tag) shopTag.textContent = tag;
+  const g = L.goal;
+  const goal = g ? `🎯 ${GOAL_TEXT[g.type](g.target)} · ${fmt(Math.min(g.progress, g.target))}/${fmt(g.target)} · 💵 $${fmt(g.reward)}` : '';
+  if (goalTag.textContent !== goal) goalTag.textContent = goal;
+  const ev = rushLeft > 0 ? `🔥 Rush hour · ${Math.ceil(rushLeft)}s` : '';
+  if (eventTag.textContent !== ev) eventTag.textContent = ev;
+  // Dock badge (macOS app): show cash waiting while the window is in the background.
+  badgeT -= dt;
+  if (badgeT <= 0) {
+    badgeT = 2;
+    const cash = L.piles.main + L.piles.drive;
+    const b = !document.hasFocus() && cash >= 1 ? '$' + fmt(cash) : '';
+    if (b !== lastBadge) { lastBadge = b; try { window.webkit.messageHandlers.badge.postMessage(b); } catch (e) {} }
+  }
   upBtn.classList.toggle('glow', UPGRADES.some(canBuy));
   panelT -= dt;
   if (panelT <= 0) {
@@ -1587,6 +1862,7 @@ function hud(dt) {
 }
 
 // ================= main loop =================
+if (!L.goal) newGoal();
 if (S.t && Date.now() - S.t > 30000) creditAway((Date.now() - S.t) / 1000);
 else if (!S.earned) toast('🍕 Grab pizzas at the oven, drop them on the counter, stand at SERVE, then collect the cash!', 7);
 
@@ -1617,7 +1893,7 @@ addEventListener('pagehide', save);
 document.addEventListener('visibilitychange', () => { if (document.hidden) save(); });
 
 // Test hook for automated checks.
-window.__game = { get S() { return S; }, get L() { return L; }, goToShop, buyUpgrade, UPGRADES, zoneCost, visibleZones, player, queue, walkers, ovens, tables, workers, carQueue, update,
+window.__game = { get S() { return S; }, get L() { return L; }, goToShop, stations, sellFranchise, starsToGain, get rushLeft() { return rushLeft; }, buyUpgrade, UPGRADES, zoneCost, visibleZones, player, queue, walkers, ovens, tables, workers, carQueue, update,
   renderFrame, idleRate, unlock, UNLOCKS, cam, renderer };
 </script>
 </body>
