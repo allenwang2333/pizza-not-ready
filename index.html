@@ -234,7 +234,7 @@ const STATIONS = {
 };
 const PATIENCE = 60, VIP_PATIENCE = 80;
 const MANAGER_POST = P(870, 222);
-const WORKER_POST_IDLE = { cleaner: P(1045, 720) };
+const WORKER_POST_IDLE = { cleaner: P(1045, 720), cleaner2: P(1120, 720) };
 
 // Base costs; each location multiplies them by its costMult.
 const UNLOCKS = [
@@ -249,6 +249,7 @@ const UNLOCKS = [
   { id: 'table3',   cost: 380,   req: 'table2',   x: 980,  y: 370, icon: '🪑', name: 'Table' },
   { id: 'oven3',    cost: 560,   req: 'carrier1', x: 430,  y: 95,  icon: '🔥', name: 'Oven' },
   { id: 'cleaner',  cost: 800,   req: 'table3',   x: 1045, y: 700, icon: '🧹', name: 'Cleaner' },
+  { id: 'cleaner2', cost: 2500,  req: 'cleaner',  x: 1135, y: 700, icon: '🧹', name: 'Cleaner 2', optional: true },
   { id: 'table4',   cost: 1150,  req: 'table3',   x: 1110, y: 370, icon: '🪑', name: 'Table' },
   { id: 'drive',    cost: 1600,  req: 'oven3',    x: 175,  y: 565, icon: '🚗', name: 'Drive-Thru' },
   { id: 'barista',  cost: 2000,  req: 'soda',     x: 300,  y: 420, icon: '☕', name: 'Barista' },
@@ -407,18 +408,19 @@ const WORKER_LOOK = {
   restocker: { shirt: '#f7c83c', hat: 'cap', hatColor: '#d99a0b', pants: '#3b3f58' },
   carrier: { shirt: '#f78a3c', hat: 'chef', pants: '#3b3f58' },
   cleaner: { shirt: '#38c979', hat: 'cap', hatColor: '#1f9a58', pants: '#2f4b7c' },
+  cleaner2: { shirt: '#8e7cc3', hat: 'cap', hatColor: '#6f51a8', pants: '#2f4b7c' },
   driver:  { shirt: '#a66cf0', hat: 'cap', hatColor: '#6c3fc4', pants: '#3b3f58' },
   barista: { shirt: '#ff7eb6', hat: 'cap', hatColor: '#e0559a', pants: '#3b3f58' },
   manager: { shirt: '#3a4255', pants: '#2b2f3a' },
 };
 
 function makeWorker(id) {
-  const type = id.startsWith('carrier') ? 'carrier' : id;
+  const type = id.startsWith('carrier') ? 'carrier' : id.startsWith('cleaner') ? 'cleaner' : id;
   return {
     id: nextId++, key: id, type, x: DOOR_X, y: 760, dir: -Math.PI / 2, moving: false, items: [], actT: 0,
     state: 'fetch', src: null, dest: 'counter', table: null,
     off: { carrier2: 24, carrier3: -24, barista: 46, restocker: -20 }[id] || 0, seed: Math.random() * 10,
-    skin: pick(SKINS), hair: pick(HAIRS), ...WORKER_LOOK[type], robot: !!loc().special.staffMult,
+    skin: pick(SKINS), hair: pick(HAIRS), ...(WORKER_LOOK[id] || WORKER_LOOK[type]), robot: !!loc().special.staffMult,
   };
 }
 function syncWorld() {
@@ -431,7 +433,7 @@ function syncWorld() {
   for (const id in TABLE_POS)
     if (L.unlocked[id] && !tables.some(t => t.id === id))
       tables.push({ id, ...TABLE_POS[id], seats: SEATS.map(() => ({ occupant: null, dirty: false, tip: 0 })), dirty: false, clean: 0 });
-  for (const id of ['cashier', 'salesclerk', ...CARRIERS, 'restocker', 'cleaner', 'driver', 'barista', 'manager'])
+  for (const id of ['cashier', 'salesclerk', ...CARRIERS, 'restocker', 'cleaner', 'cleaner2', 'driver', 'barista', 'manager'])
     if (L.unlocked[id] && !workers.some(w => w.key === id)) workers.push(makeWorker(id));
 }
 syncWorld();
@@ -861,8 +863,11 @@ function updateManager(w, sp, dt) {
 }
 
 function updateCleaner(w, sp, dt) {
-  if (!w.table || !canCleanTable(w.table)) w.table = tables.find(canCleanTable) || null;
-  if (!w.table) { const p = WORKER_POST_IDLE.cleaner; moveStaff(w, p.x, p.y, sp, dt); return; }
+  const claimed = t => workers.some(other => other !== w && other.type === 'cleaner' && other.table === t);
+  if (!w.table || !canCleanTable(w.table) || claimed(w.table))
+    w.table = tables.filter(t => canCleanTable(t) && !claimed(t))
+      .reduce((nearest, t) => !nearest || dist(w, t) < dist(w, nearest) ? t : nearest, null);
+  if (!w.table) { const p = WORKER_POST_IDLE[w.key] || WORKER_POST_IDLE.cleaner; moveStaff(w, p.x, p.y, sp, dt); return; }
   const t = w.table;
   const side = t.aisle < t.x ? -1 : 1;
   if (moveStaff(w, t.x + side * 60, t.y, sp, dt)) {
@@ -1124,6 +1129,7 @@ function unlock(d) {
   syncWorld(); confetti(d.x, d.y); sfx.unlock();
   toast(d.id === 'salesclerk' ? '💁 Sales Clerk hired! Two orders can now be served at once.'
     : d.id === 'restocker' ? '📦 Restocking Assistant hired! Carries all products and prioritizes missing order items.'
+    : d.id === 'cleaner2' ? '🧹 Second Cleaner hired! Cleaners work on separate empty, dirty tables.'
     : `${d.icon} ${d.name} unlocked!`);
   save();
 }
@@ -2239,7 +2245,7 @@ function refreshShops() {
       info = `${done}/${UNLOCKS.length} unlocked · ` + (i === S.cur ? 'you are here' : `earning $${fmt(idleRateFor(sh, i))}/s`);
       btn = i === S.cur ? '<button disabled>Here</button>' : `<button data-shop="${i}">Go</button>`;
     } else if (next) {
-      info = `Unlock core equipment and staff in ${LOCATIONS[i - 1].name}, then pay $${fmt(NEXT_SHOP_COST * lc.costMult)}. Extra sales and restocking staff are optional.`;
+      info = `Unlock core equipment and staff in ${LOCATIONS[i - 1].name}, then pay $${fmt(NEXT_SHOP_COST * lc.costMult)}. Extra clerks, restocking staff, and cleaners are optional.`;
     } else info = 'Open more shops to find out';
     return `<div class="row"><div class="ic">${known ? lc.icon : '❔'}</div>
       <div class="tx"><div class="nm">${known ? lc.name : '???'}</div><div class="ds">${info}</div>

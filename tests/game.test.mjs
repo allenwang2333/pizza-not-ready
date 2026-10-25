@@ -617,3 +617,44 @@ test('staff stop instead of walking through an unreachable target', () => {
   assert.equal(run('w.x'), 880);
   assert.equal(run('w.y'), 398);
 });
+
+test('a second cleaner can be hired and survives save loading without being mandatory', () => {
+  const run = game({ unlocked: { oven1: true, cleaner: true } });
+  assert.equal(run('workers.filter(w => w.type === "cleaner").length'), 1);
+  run('const hire = UNLOCKS.find(d => d.id === "cleaner2");');
+  assert.equal(run('hire.optional'), true);
+  assert.equal(run('hire.req'), 'cleaner');
+  assert.equal(run('visibleZones().includes(hire)'), true);
+  run('unlock(hire);');
+  assert.equal(run('workers.filter(w => w.type === "cleaner").length'), 2);
+  const loaded = game(JSON.parse(run('JSON.stringify(S)')));
+  assert.equal(loaded('workers.filter(w => w.type === "cleaner").length'), 2);
+});
+
+test('two cleaners reserve separate empty dirty tables and count each cleaning once', () => {
+  const run = game();
+  run(diningRoom + `L.unlocked.cleaner = L.unlocked.cleaner2 = true; syncWorld();
+    L.goal = { type: 'clean', target: 100, progress: 0, reward: 0 };
+    for (const t of tables) { t.dirty = true; t.seats[0].dirty = true; t.seats[0].tip = 12; }
+    updateWorkers(1 / 60);
+  `);
+  assert.equal(run('workers.filter(w => w.type === "cleaner" && w.table).length'), 2);
+  assert.equal(run('new Set(workers.filter(w => w.type === "cleaner").map(w => w.table)).size'), 2);
+  run('for (let i = 0; i < 60 * 30; i++) updateWorkers(1 / 60);');
+  assert.equal(run('tables.every(t => !t.dirty)'), true);
+  assert.equal(run('L.goal.progress'), 2);
+  assert.equal(run('L.piles.main'), 24);
+});
+
+test('a second cleaner does not join a claimed table or clean an occupied table', () => {
+  const run = game();
+  run(diningRoom + `L.unlocked.cleaner = L.unlocked.cleaner2 = true; syncWorld();
+    for (const t of tables) { t.dirty = true; t.seats[0].dirty = true; }
+    tables[1].seats[1].occupant = { state: 'eat' };
+    updateWorkers(1 / 60);
+  `);
+  assert.equal(run('workers.filter(w => w.type === "cleaner" && w.table === tables[0]).length'), 1);
+  assert.equal(run('workers.filter(w => w.type === "cleaner" && w.table === tables[1]).length'), 0);
+  run('tables[1].seats[1].occupant = null; updateWorkers(1 / 60);');
+  assert.equal(run('workers.filter(w => w.type === "cleaner" && w.table === tables[1]).length'), 1);
+});
