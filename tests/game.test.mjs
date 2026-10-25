@@ -73,7 +73,7 @@ test('all group members finish eating and all their tips can be collected', () =
 test('an angry group leaves together and refunds only the combined delivered items', () => {
   const run = game();
   run(diningRoom + `const c = spawnCustomer(3);
-    c.got = { pizza: 2, soda: 1, cream: 0 };
+    c.got = { pizza: 2, soda: 1, cream: 0, side: 0 };
     leaveAngry(c, 0);
   `);
   assert.equal(run('queue.length'), 0);
@@ -278,8 +278,8 @@ const serviceSetup = `
 test('sales clerk serves a second order while the first waits for an unavailable drink', () => {
   const run = game();
   run(serviceSetup + `
-    a.order = { pizza: 0, soda: 1, cream: 0 };
-    b.order = { pizza: 2, soda: 0, cream: 0 }; L.counter = 5;
+    a.order = { pizza: 0, soda: 1, cream: 0, side: 0 };
+    b.order = { pizza: 2, soda: 0, cream: 0, side: 0 }; L.counter = 5;
     for (let i = 0; i < 60; i++) updateCustomers(1 / 60);
   `);
   assert.equal(run('queue.length'), 1);
@@ -291,7 +291,7 @@ test('sales clerk serves a second order while the first waits for an unavailable
   assert.equal(run('walkers.includes(b)'), true);
   assert.equal(run('finishOrder(b)'), undefined);
   assert.equal(run('L.piles.main'), 10, 'completed orders cannot be paid twice');
-  run(`const next = spawnCustomer(1); next.order = { pizza: 1, soda: 0, cream: 0 };
+  run(`const next = spawnCustomer(1); next.order = { pizza: 1, soda: 0, cream: 0, side: 0 };
     next.x = SALES_CASHIER.x; next.y = QUEUE_Y; updateCustomers(0.01);
   `);
   assert.equal(run('next.lane'), 1, 'the free lane can take another order');
@@ -300,7 +300,7 @@ test('sales clerk serves a second order while the first waits for an unavailable
 
 test('two registers consume stock and pay once each in the same simulation step', () => {
   const run = game();
-  run(serviceSetup + `a.order = b.order = { pizza: 1, soda: 0, cream: 0 }; L.counter = 2; updateCustomers(0.01);`);
+  run(serviceSetup + `a.order = b.order = { pizza: 1, soda: 0, cream: 0, side: 0 }; L.counter = 2; updateCustomers(0.01);`);
   assert.equal(run('queue.length'), 0);
   assert.equal(run('L.counter'), 0);
   assert.equal(run('L.piles.main'), 10);
@@ -309,7 +309,7 @@ test('two registers consume stock and pay once each in the same simulation step'
 
 test('one remaining pizza cannot be sold twice by parallel registers', () => {
   const run = game();
-  run(serviceSetup + `a.order = b.order = { pizza: 1, soda: 0, cream: 0 }; L.counter = 1; updateCustomers(0.01);`);
+  run(serviceSetup + `a.order = b.order = { pizza: 1, soda: 0, cream: 0, side: 0 }; L.counter = 1; updateCustomers(0.01);`);
   assert.equal(run('queue.length'), 1);
   assert.equal(run('L.counter'), 0);
   assert.equal(run('L.piles.main'), 5);
@@ -318,7 +318,7 @@ test('one remaining pizza cannot be sold twice by parallel registers', () => {
 test('the second register needs its clerk or the player at its own service mat', () => {
   const run = game();
   run(serviceSetup + `workers.find(w => w.type === 'salesclerk').x = 100;
-    a.order = { pizza: 0, soda: 1, cream: 0 }; b.order = { pizza: 1, soda: 0, cream: 0 };
+    a.order = { pizza: 0, soda: 1, cream: 0, side: 0 }; b.order = { pizza: 1, soda: 0, cream: 0, side: 0 };
     L.counter = 5; updateCustomers(0.01);
   `);
   assert.equal(run('b.got.pizza'), 0);
@@ -330,7 +330,7 @@ test('a shop without a sales clerk keeps single-register service', () => {
   const run = game();
   run(`spawnT = 1e6; player.x = CASHIER.x; player.y = CASHIER.y;
     const a = spawnCustomer(1), b = spawnCustomer(1);
-    a.order = { pizza: 0, soda: 1, cream: 0 }; b.order = { pizza: 1, soda: 0, cream: 0 };
+    a.order = { pizza: 0, soda: 1, cream: 0, side: 0 }; b.order = { pizza: 1, soda: 0, cream: 0, side: 0 };
     a.x = b.x = QUEUE_X; a.y = b.y = QUEUE_Y; L.counter = 10;
     for (let i = 0; i < 60; i++) updateCustomers(1 / 60);
   `);
@@ -342,7 +342,7 @@ test('a shop without a sales clerk keeps single-register service', () => {
 test('the restocking assistant prioritizes missing items over a larger pizza pile', () => {
   const run = game();
   run(`L.unlocked.restocker = true; L.unlocked.soda = true; syncWorld();
-    const c = spawnCustomer(1); c.lane = 0; c.order = { pizza: 0, soda: 1, cream: 0 };
+    const c = spawnCustomer(1); c.lane = 0; c.order = { pizza: 0, soda: 1, cream: 0, side: 0 };
     ovens[0].stock = 10; stations[0].stock = 1;
     const w = workers.find(w => w.type === 'restocker'); updateCarrier(w, 120, 0, producers());
   `);
@@ -682,4 +682,75 @@ test('control API buys at normal prices and moves through normal player updates'
   assert.equal(run('player.x - oldX'), 17);
   run('controlKeysUntil = Date.now() - 1; const stoppedX = player.x; updatePlayer(0.1);');
   assert.equal(run('player.x'), run('stoppedX'));
+});
+
+test('the drink bar is optional, needs soda, and each location sells its own side drink', () => {
+  const run = game();
+  assert.equal(run('UNLOCKS.find(d => d.id === "side").optional'), true);
+  assert.equal(run('UNLOCKS.find(d => d.id === "side").req'), 'soda');
+  assert.equal(run("LOCATIONS.map(l => l.side.name).join()"), 'Boba Tea,Mango Boba,Coffee,Matcha Latte,Nebula Latte');
+  assert.equal(run('new Set(LOCATIONS.map(l => l.side.icon)).size'), 5);
+  assert.equal(run("visibleZones().some(d => d.id === 'side')"), false);
+  run('L.unlocked.soda = true;');
+  assert.equal(run("visibleZones().some(d => d.id === 'side')"), true);
+  run('S.cur = 2;');
+  assert.equal(run("equipInfo('side').name"), 'Coffee Bar');
+  assert.equal(run("zoneInfo({ id: 'side' }).name"), 'Coffee');
+});
+
+test('side drinks are ordered only after the bar opens, at the local chance', () => {
+  const run = game();
+  run(`const before = Array.from({ length: 200 }, () => makeOrder(false));
+    L.unlocked.side = true;
+    const orders = Array.from({ length: 4000 }, () => makeOrder(false));
+    const lonelyCars = Array.from({ length: 200 }, () => makeCarOrder());
+    L.unlocked.barista = true;
+    const cars = Array.from({ length: 4000 }, () => makeCarOrder());
+    const vips = Array.from({ length: 100 }, () => makeOrder(true)).filter(o => o.side);
+  `);
+  assert.equal(run('before.every(o => o.side === 0)'), true);
+  const share = run('orders.filter(o => o.side).length / orders.length');
+  assert.ok(share > 0.45 && share < 0.55, `share ${share}`);
+  assert.equal(run('lonelyCars.every(o => o.side === 0)'), true);
+  const carShare = run('cars.filter(o => o.side).length / cars.length');
+  assert.ok(carShare > 0.45 && carShare < 0.55, `car share ${carShare}`);
+  assert.equal(run('orders.every(o => o.side <= 2) && vips.every(o => o.side >= 2 && o.side <= 3)'), true);
+});
+
+test('a side drink is picked up, stocked by staff, and paid at its own price', () => {
+  const run = game();
+  run(`L.unlocked.soda = L.unlocked.side = L.unlocked.barista = L.unlocked.cashier = true; syncWorld();
+    const bar = stations.find(o => o.id === 'side');
+    bar.stock = 3; player.x = bar.pick.x; player.y = bar.pick.y; updatePlayer(0.2);
+  `);
+  assert.equal(run("player.items.join()"), 'side');
+  assert.equal(run('bar.stock'), 2);
+  run(`player.items.length = 0; player.x = 900; player.y = 700;
+    const barista = workers.find(w => w.type === 'barista');
+    barista.x = bar.pick.x + 46; barista.y = bar.pick.y;
+    for (let i = 0; i < 60 * 20; i++) { updateWorkers(1 / 60); updateProducers(1 / 60); }
+  `);
+  assert.ok(run('L.side') > 0, 'barista delivered a side drink');
+  run(`L.piles.main = 0; const c = spawnCustomer(1);
+    c.order = { pizza: 0, soda: 0, cream: 0, side: 2 }; c.got = { ...c.order }; finishOrder(c);
+  `);
+  assert.equal(run('L.piles.main'), run("Math.round(2 * itemPrice('side'))"));
+  assert.equal(run("itemPrice('side')"), 6);
+});
+
+test('the drink bar supports the drive-thru and saves its stock', () => {
+  const run = game();
+  run(`L.unlocked.side = true; putItem('side', 'counter'); putItem('side', 'drive');
+    const f = { got: { pizza: 0, soda: 0, cream: 0, side: 0 }, order: { pizza: 0, soda: 0, cream: 0, side: 1 } };`);
+  assert.equal(run('L.side'), 1);
+  assert.equal(run('L.dside'), 1);
+  assert.equal(run('roomFor("side", "counter")'), 11);
+  assert.equal(run('roomFor("side", "drive")'), 9);
+  const loaded = game(JSON.parse(run('JSON.stringify(S)')));
+  assert.equal(loaded('L.unlocked.side'), true);
+  assert.equal(loaded('L.side'), 1);
+  assert.equal(loaded('L.dside'), 1);
+  const legacy = game({ money: 5, shops: [{ unlocked: { oven1: true }, counter: 3 }] });
+  assert.equal(legacy('L.side'), 0);
+  assert.equal(legacy('L.unlocked.side'), undefined);
 });

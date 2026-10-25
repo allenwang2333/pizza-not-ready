@@ -219,18 +219,20 @@ const ITEMS = {
   pizza: { icon: '🍕', base: 5 },
   soda:  { icon: '🥤', base: 3 },
   cream: { icon: '🍦', base: 8 },
+  side:  { icon: '🧋', base: 6 },
 };
 const ITEM_TYPES = Object.keys(ITEMS);
 // Counter stock per item. Pizza keeps the old save key "counter".
-const STOCK_KEY = { pizza: 'counter', soda: 'soda', cream: 'cream' };
-const COUNTER_CAP = { pizza: COUNTER_MAX, soda: 12, cream: 12 };
+const STOCK_KEY = { pizza: 'counter', soda: 'soda', cream: 'cream', side: 'side' };
+const COUNTER_CAP = { pizza: COUNTER_MAX, soda: 12, cream: 12, side: 12 };
 // Drive-thru counter stock per item. Pizza keeps the old save key "drive".
-const DRIVE_KEY = { pizza: 'drive', soda: 'dsoda', cream: 'dcream' };
-const DRIVE_CAP = { pizza: DRIVE_MAX, soda: 10, cream: 10 };
+const DRIVE_KEY = { pizza: 'drive', soda: 'dsoda', cream: 'dcream', side: 'dside' };
+const DRIVE_CAP = { pizza: DRIVE_MAX, soda: 10, cream: 10, side: 10 };
 // Drink and dessert stations along the left kitchen wall; w/h is the blocked floor area.
 const STATIONS = {
   soda:  { x: 125, y: 410, w: 66, h: 60, pick: P(185, 410), bake: 1.3, max: 8 },
   cream: { x: 121, y: 260, w: 58, h: 70, pick: P(185, 260), bake: 2.0, max: 6 },
+  side:  { x: 121, y: 335, w: 58, h: 56, pick: P(185, 335), bake: 1.6, max: 8 },
 };
 const PATIENCE = 60, VIP_PATIENCE = 80;
 const MANAGER_POST = P(870, 222);
@@ -245,6 +247,7 @@ const UNLOCKS = [
   { id: 'table2',   cost: 160,   req: 'cashier',  x: 1110, y: 170, icon: '🪑', name: 'Table' },
   { id: 'carrier1', cost: 250,   req: 'cashier',  x: 470,  y: 260, icon: '🧑‍🍳', name: 'Baker' },
   { id: 'soda',     cost: 450,   req: 'carrier1', x: 125,  y: 410, icon: '🥤', name: 'Soda' },
+  { id: 'side',     cost: 3500,  req: 'soda',     x: 125,  y: 335, icon: '🧋', name: 'Drink Bar', optional: true },
   { id: 'restocker', cost: 1500, req: 'soda',     x: 410,  y: 330, icon: '📦', name: 'Restocking Assistant', optional: true },
   { id: 'table3',   cost: 380,   req: 'table2',   x: 980,  y: 370, icon: '🪑', name: 'Table' },
   { id: 'oven3',    cost: 560,   req: 'carrier1', x: 430,  y: 95,  icon: '🔥', name: 'Oven' },
@@ -274,26 +277,31 @@ const NEXT_SHOP_COST = 8000;
 // Each location is the same floor plan with a new look and bigger numbers.
 const LOCATIONS = [
   { name: 'Corner Pizzeria', icon: '🧱', priceMult: 1,  costMult: 1,   orderMax: 3, carMult: 1,
+    side: { name: 'Boba Tea', icon: '🧋', bar: 'Boba Bar', chance: 0.5, cup: '#c8a27a', led: '#ff9ec4' },
     special: { title: 'Family dining', desc: 'Groups share a table. Upgrade tables for parties of 3–4.' },
     theme: { sky: '#bfe3f2', ground: ['#86cf5e', '60,140,50', '170,230,120'], floor: { kind: 'wood', h: 30, s: 42, l: 66 },
       tile: ['#fbf4e8', '#e8dac4'], wallKind: 'brick', wallHue: 10, wall: '#e7835f', trim: '#fff1dc',
       leaf: '#4fb35a', leaf2: '#62c46a', trunk: '#8a5a3b', cloth: ['#e8473b', '#fff7ef'] } },
   { name: 'Beach Shack', icon: '🏖️', priceMult: 3, costMult: 5, orderMax: 4, carMult: 1,
+    side: { name: 'Mango Boba', icon: '🍹', bar: 'Mango Bar', chance: 0.5, cup: '#ffb347', led: '#ffd23f' },
     special: { title: 'Ice-cream specials', desc: '75% of customers order ice cream when unlocked. Tables have beach parasols.', creamChance: 0.75, parasols: true },
     theme: { sky: '#a6e4f7', ground: ['#f1d796', '200,160,90', '255,240,200'], floor: { kind: 'wood', h: 38, s: 30, l: 76 },
       tile: ['#f2fbfa', '#bfe9e4'], wallKind: 'planks', wallColor: '#4fc1bb', wall: '#5fd0c4', trim: '#fffaf0',
       leaf: '#33b56a', leaf2: '#4cd082', trunk: '#b08050', cloth: ['#2fb3e0', '#fffaf0'] } },
   { name: 'City Diner', icon: '🏙️', priceMult: 9, costMult: 25, orderMax: 4, carMult: 1.6,
+    side: { name: 'Coffee', icon: '☕', bar: 'Coffee Bar', chance: 0.5, cup: '#6b4226', led: '#ff8c42' },
     special: { title: 'Office lunch rush', desc: '30-second lunch rush after every 2 minutes of normal service.', rushEvery: 120, rushDuration: 30 },
     theme: { sky: '#c9d6e3', ground: ['#a7adb5', '80,85,95', '200,205,210'], floor: { kind: 'checker', a: '#f4f4f2', b: '#2e3440' },
       tile: ['#ffffff', '#f2b8b8'], wallKind: 'tiles', wallColor: '#3c6fd1', wall: '#4d7fe0', trim: '#f4f4f2',
       leaf: '#3f9e5a', leaf2: '#56b46e', trunk: '#6b5040', cloth: ['#3c6fd1', '#ffffff'] } },
   { name: 'Ski Lodge', icon: '🏔️', priceMult: 27, costMult: 125, orderMax: 5, carMult: 1.2,
+    side: { name: 'Matcha Latte', icon: '🍵', bar: 'Matcha Bar', chance: 0.5, cup: '#8fc46b', led: '#9be564' },
     special: { title: 'Hot chocolate', desc: 'Serve hot chocolate instead of soda, using the same drink station.', drinkName: 'Hot Chocolate', drinkIcon: '☕' },
     theme: { sky: '#dce9f5', ground: ['#f3f7fb', '190,205,220', '255,255,255'], floor: { kind: 'wood', h: 24, s: 45, l: 45 },
       tile: ['#f3ece0', '#dccdb5'], wallKind: 'logs', wallColor: '#8a5a3b', wall: '#9b6a45', trim: '#f3ece0',
       leaf: '#2f7d4f', leaf2: '#3d9461', trunk: '#6b4630', cloth: ['#2f7d4f', '#f3ece0'] } },
   { name: 'Moon Base', icon: '🚀', priceMult: 81, costMult: 625, orderMax: 5, carMult: 2,
+    side: { name: 'Nebula Latte', icon: '🌌', bar: 'Nebula Bar', chance: 0.5, cup: '#8a5cff', led: '#b794ff' },
     special: { title: 'Robot crew', desc: 'Robot staff move 25% faster, including while you are away.', staffMult: 1.25 },
     theme: { sky: '#161a33', ground: ['#8d8f99', '60,62,72', '180,182,190'], floor: { kind: 'metal' },
       tile: ['#e3e6ec', '#c5cad3'], wallKind: 'panels', wallColor: '#5b6378', wall: '#6c7590', trim: '#d6dbe6',
@@ -336,7 +344,7 @@ const SAVE_KEY = 'pizza-ready-noads-v1';
 const newShop = () => ({
   unlocked: { oven1: true }, paid: {},
   up: { speed: 0, cap: 0, oven: 0, price: 0, cust: 0, staff: 0 },
-  counter: 0, drive: 0, soda: 0, cream: 0, dsoda: 0, dcream: 0, piles: { main: 0, drive: 0 },
+  counter: 0, drive: 0, soda: 0, cream: 0, side: 0, dsoda: 0, dcream: 0, dside: 0, piles: { main: 0, drive: 0 },
   rating: 3, goal: null, goalsDone: 0, lv: {}, auto: { enabled: false, reserve: 5000 },
 });
 function freshState() {
@@ -348,7 +356,7 @@ function fixShop(d) {
   Object.assign(sh.up, d.up); Object.assign(sh.piles, d.piles);
   sh.up.price = Math.min(sh.up.price, UPGRADES.find(u => u.id === 'price').max);
   sh.counter = d.counter | 0; sh.drive = d.drive | 0; sh.soda = d.soda | 0; sh.cream = d.cream | 0;
-  sh.dsoda = d.dsoda | 0; sh.dcream = d.dcream | 0;
+  sh.dsoda = d.dsoda | 0; sh.dcream = d.dcream | 0; sh.side = d.side | 0; sh.dside = d.dside | 0;
   sh.rating = clamp(d.rating ?? 3, 1, 5); sh.goal = d.goal || null; sh.goalsDone = d.goalsDone | 0; sh.lv = { ...d.lv };
   sh.auto.enabled = d.auto?.enabled === true;
   if (Number.isSafeInteger(d.auto?.reserve) && d.auto.reserve >= 0) sh.auto.reserve = d.auto.reserve;
@@ -372,8 +380,11 @@ function loadState() {
 }
 let S = loadState(), L = S.shops[S.cur];
 const loc = () => LOCATIONS[S.cur];
-const itemInfo = t => t === 'soda' && loc().special.drinkName
-  ? { ...ITEMS[t], name: loc().special.drinkName, icon: loc().special.drinkIcon } : ITEMS[t];
+const itemInfo = t => t === 'side' ? { ...ITEMS.side, ...loc().side }
+  : t === 'soda' && loc().special.drinkName
+    ? { ...ITEMS[t], name: loc().special.drinkName, icon: loc().special.drinkIcon } : ITEMS[t];
+// Unlock zones for drinks use the local name and icon.
+const zoneInfo = d => d.id === 'side' || (d.id === 'soda' && loc().special.drinkName) ? itemInfo(d.id) : d;
 const rushDelay = () => loc().special.rushEvery || rand(240, 420);
 // Each prestige star adds 10% to all prices.
 const starMult = () => 1 + 0.1 * S.stars;
@@ -446,10 +457,12 @@ const EQUIP = {
   drive:   { name: 'Drive-Thru', icon: '🚗', base: 800, h: 2.4 },
   soda:    { name: 'Soda', icon: '🥤', base: 400, h: 2.8 },
   cream:   { name: 'Ice Cream', icon: '🍦', base: 1200, h: 2.8 },
+  side:    { name: 'Drink Bar', icon: '🧋', base: 800, h: 2.8 },
 };
 const EQUIP_MAX = 5;
 const equipKind = id => id.startsWith('oven') ? 'oven' : id.startsWith('table') ? 'table' : id;
-const equipInfo = id => id === 'soda' && loc().special.drinkName ? { ...EQUIP.soda, ...itemInfo('soda') } : EQUIP[equipKind(id)];
+const equipInfo = id => id === 'side' ? { ...EQUIP.side, ...itemInfo('side'), name: itemInfo('side').bar }
+  : id === 'soda' && loc().special.drinkName ? { ...EQUIP.soda, ...itemInfo('soda') } : EQUIP[equipKind(id)];
 const lvOf = (id, sh = L) => sh.lv[id] || 1;
 const equipCost = id => Math.round(EQUIP[equipKind(id)].base * Math.pow(2.5, lvOf(id) - 1) * loc().costMult);
 // Work time multiplier: Lv 5 takes 40% of the Lv 1 time.
@@ -882,12 +895,13 @@ function updateCleaner(w, sp, dt) {
 }
 
 function makeOrder(vip) {
-  const o = { pizza: randi(1, loc().orderMax) + (vip ? 3 : 0), soda: 0, cream: 0 };
+  const o = { pizza: randi(1, loc().orderMax) + (vip ? 3 : 0), soda: 0, cream: 0, side: 0 };
   if (L.unlocked.soda && Math.random() < 0.6) o.soda = randi(1, 2) + (vip ? 1 : 0);
   if (L.unlocked.cream && Math.random() < (loc().special.creamChance || 0.45)) o.cream = 1 + (vip ? 1 : 0);
+  if (L.unlocked.side && Math.random() < loc().side.chance) o.side = randi(1, 2) + (vip ? 1 : 0);
   return o;
 }
-const orderSize = o => o.pizza + o.soda + o.cream;
+const orderSize = o => o.pizza + o.soda + o.cream + o.side;
 const orderLeft = c => ITEM_TYPES.some(t => c.got[t] < c.order[t]);
 
 const partySize = c => 1 + (c.guests?.length || 0);
@@ -895,7 +909,7 @@ const queueSize = () => queue.reduce((n, c) => n + partySize(c), 0);
 function newCustomer(vip = false) {
   return {
     id: nextId++, x: SPAWN.x + rand(-8, 8), y: SPAWN.y, dir: -Math.PI / 2, moving: true,
-    order: makeOrder(vip), got: { pizza: 0, soda: 0, cream: 0 }, items: [], vip,
+    order: makeOrder(vip), got: { pizza: 0, soda: 0, cream: 0, side: 0 }, items: [], vip,
     patience: vip ? VIP_PATIENCE : PATIENCE, dine: Math.random() < 0.65,
     state: 'queue', path: [], next: null, table: null, timer: 0, seed: Math.random() * 10,
     shirt: vip ? '#f5c242' : pick(SHIRTS), skin: pick(SKINS), hair: pick(HAIRS), pants: pick(PANTS), hairStyle: randi(0, 2),
@@ -1069,11 +1083,12 @@ function goalProgress(type, amt) {
 }
 
 function makeCarOrder() {
-  const o = { pizza: randi(3, 6), soda: 0, cream: 0 };
+  const o = { pizza: randi(3, 6), soda: 0, cream: 0, side: 0 };
   // Only once a barista can keep the drive-thru stocked; one car waiting on a drink blocks the lane.
   if (!L.unlocked.barista) return o;
   if (L.unlocked.soda && Math.random() < 0.6) o.soda = randi(1, 3);
   if (L.unlocked.cream && Math.random() < (loc().special.creamChance || 0.45)) o.cream = randi(1, 2);
+  if (L.unlocked.side && Math.random() < loc().side.chance) o.side = randi(1, 2);
   return o;
 }
 
@@ -1083,7 +1098,7 @@ function updateCars(dt) {
     if (carT <= 0) {
       carT = carTime() * rand(0.8, 1.2);
       if (carQueue.length < 3) carQueue.push({ id: nextId++, x: CAR_X, y: 900, order: makeCarOrder(),
-        got: { pizza: 0, soda: 0, cream: 0 }, color: pick(CAR_COLORS) });
+        got: { pizza: 0, soda: 0, cream: 0, side: 0 }, color: pick(CAR_COLORS) });
     }
   }
   carQueue.forEach((c, i) => moveTo(c, CAR_X, CAR_Y + i * CAR_GAP, 170, dt));
@@ -1134,7 +1149,7 @@ function unlock(d) {
   toast(d.id === 'salesclerk' ? '💁 Sales Clerk hired! Two orders can now be served at once.'
     : d.id === 'restocker' ? '📦 Restocking Assistant hired! Carries all products and prioritizes missing order items.'
     : d.id === 'cleaner2' ? '🧹 Second Cleaner hired! Cleaners work on separate empty, dirty tables.'
-    : `${d.icon} ${d.name} unlocked!`);
+    : `${zoneInfo(d).icon} ${zoneInfo(d).name} unlocked!`);
   save();
 }
 
@@ -1178,7 +1193,7 @@ function idleRateFor(sh, li) {
   const rushDemand = lc.special.rushEvery ? 1 + 1.5 * lc.special.rushDuration / (lc.special.rushEvery + lc.special.rushDuration) : 1;
   const demand = (1 + lc.orderMax) / 2 / spawnTimeOf(sh.up.cust, nOvens, tableLv, sh.rating) * rushDemand + drive;
   const haul = (CARRIERS.filter(id => u[id]).length + (u.restocker ? 1 : 0)) * staffCap(sh.up.staff) / 7 * (lc.special.staffMult || 1);
-  const extras = 1 + (u.barista || u.restocker ? (u.soda ? 0.35 : 0) + (u.cream ? 0.3 * (lc.special.creamChance || 0.45) / 0.45 : 0) : 0);
+  const extras = 1 + (u.barista || u.restocker ? (u.soda ? 0.35 : 0) + (u.side ? 0.25 : 0) + (u.cream ? 0.3 * (lc.special.creamChance || 0.45) / 0.45 : 0) : 0);
   return Math.min(prod, demand, haul) * pizzaPrice(sh.up.price) * lc.priceMult * starMult() * extras * 0.5;
 }
 const idleRate = () => S.shops.reduce((a, sh, i) => a + idleRateFor(sh, i), 0);
@@ -1572,17 +1587,19 @@ function resetScene() {
   firstSync = true;
   driveCounter.userData.born = undefined;
   applyTheme(loc().theme);
+  applySideColor();
 }
 
 // ---- looks per equipment level (index = level - 1) ----
 const OVEN_LOOK = [
   { dome: '#d36d40', ring: '#8f3d22', m: 0, r: 0.78 }, { dome: '#b53a2a', ring: '#5e2416', m: 0, r: 0.7 },
-  { dome: '#6b737d', ring: '#c47a3a', m: 0.3, r: 0.5 }, { dome: '#2f3136', ring: '#f5c242', m: 0.4, r: 0.4 },
+  { dome: '#6b737d', ring: '#c47a3a', m: 0.3, r: 0.5 }, { dome: '#2f3136', ring: '#52e0ff', m: 0.4, r: 0.4 },
   { dome: '#f5c242', ring: '#fff1c4', m: 0.7, r: 0.3 },
 ];
 const STATION_LOOK = {
   soda: ['#e8473b', '#c2185b', '#c9ccd1', '#2f3136', '#f5c242'],
   cream: ['#e9f6ff', '#c8f5e1', '#e3d4ff', '#c9ccd1', '#f5c242'],
+  side: ['#f6efe6', '#e8c9a8', '#c9ccd1', '#2f3136', '#f5c242'],
 };
 const COUNTER_LOOK = [
   { top: '#f6e3c3', body: '#b8743f', panel: '#d18b4f' }, { top: '#f4f1ec', body: '#9c5f33', panel: '#c27a45' },
@@ -1595,10 +1612,29 @@ const ownMat = color => new THREE.MeshStandardMaterial({ color, roughness: 0.78 
 // Scale bump after an upgrade (static objects); entity objects replay their pop-in instead.
 const bump = t0 => t0 === undefined ? 1 : 0.85 + 0.15 * Math.max(0.001, easeOutBack(clamp((time - t0) / 0.45, 0, 1)));
 
+// Equipment gets a new shape at most levels, not only a new color.
+const GLASS = new THREE.MeshStandardMaterial({ color: '#bfeaff', transparent: true, opacity: 0.3, roughness: 0.05, metalness: 0.1, depthWrite: false });
+const glowMat = (color, opacity = 1) => new THREE.MeshBasicMaterial({ color, transparent: true, opacity, toneMapped: false, depthWrite: false });
+const FX = {
+  belt: canvasTex(64, 16, (c, w, h) => {
+    c.fillStyle = '#1b1d22'; c.fillRect(0, 0, w, h); c.fillStyle = '#3a3f4b';
+    for (let x = 0; x < w; x += 16) c.fillRect(x, 0, 6, h);
+  }),
+  lcd: canvasTex(256, 96, (c, w, h) => {
+    c.fillStyle = '#06222b'; c.fillRect(0, 0, w, h);
+    c.textAlign = 'center'; c.textBaseline = 'middle';
+    c.fillStyle = '#6fe3ff'; c.font = `900 46px ${UI_FONT}`; c.fillText('425°', 84, 50);
+    c.fillStyle = '#7ef0a8'; c.font = `900 28px ${UI_FONT}`; c.fillText('READY', 202, 50);
+  }),
+};
+FX.belt.repeat.set(5, 1);
+const torus = (r, tube) => G(`t${r},${tube}`, () => new THREE.TorusGeometry(r, tube, 8, 40));
+const rotated = (mesh, x = 0, y = 0, z = 0) => { mesh.rotation.set(x, y, z); return mesh; };
+
 // ---- counters ----
 const counterTopMat = ownMat('#f6e3c3'), counterMat = ownMat('#b8743f'), counterPanelMat = ownMat('#d18b4f');
 const counterGroup = new THREE.Group(), salesRegister = new THREE.Group();
-let counterNeon, counterTrim;
+let counterNeon, counterTrim, counterGuard, counterMenu, counterHolo;
 {
   const g = counterGroup; g.position.set(X(COUNTER.x + COUNTER.w / 2), 0, Z(COUNTER.y + COUNTER.h / 2));
   add(g, gBox(6.5, 0.95, 1.2, 0.05), counterMat, 0, 0.475, 0);
@@ -1617,9 +1653,24 @@ let counterNeon, counterTrim;
   salesScreen.rotation.x = -0.35;
   add(salesScreen, new THREE.PlaneGeometry(0.42, 0.24), BASIC('#7ef0c8'), 0, 0, 0.035, false);
   g.add(salesRegister);
+  counterGuard = add(g, gBox(6.2, 0.4, 0.03, 0.01), GLASS, 0, 1.3, 0.62, false);
+  counterMenu = new THREE.Group(); counterMenu.position.set(3.15, 1.06, 0.1); g.add(counterMenu);
+  add(counterMenu, gBox(0.16, 0.5, 0.16, 0.03), '#2f3136', 0, 0.25, 0);
+  add(counterMenu, gBox(0.52, 0.8, 0.06, 0.02), '#1d2127', 0, 0.9, 0);
+  add(counterMenu, new THREE.PlaneGeometry(0.44, 0.72), new THREE.MeshBasicMaterial({ toneMapped: false, map: canvasTex(128, 224, (c, w, h) => {
+    c.fillStyle = '#06222b'; c.fillRect(0, 0, w, h); c.textAlign = 'center'; c.textBaseline = 'middle'; c.font = `54px ${UI_FONT}`;
+    [ITEMS.pizza.icon, ITEMS.soda.icon, ITEMS.cream.icon, ITEMS.side.icon].forEach((icon, i) => c.fillText(icon, w / 2, 32 + i * 54));
+  }) }), 0, 0.9, 0.035, false);
+  counterHolo = add(g, new THREE.PlaneGeometry(1.2, 0.42), decalMat(canvasTex(256, 90, (c, w, h) => {
+    c.fillStyle = 'rgba(6,34,43,.92)'; c.beginPath(); c.roundRect(4, 4, w - 8, h - 8, 22); c.fill();
+    c.strokeStyle = '#6fe3ff'; c.lineWidth = 5; c.stroke();
+    c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillStyle = '#6fe3ff'; c.shadowColor = '#6fe3ff'; c.shadowBlur = 12;
+    c.font = `900 46px ${UI_FONT}`; c.fillText('OPEN', w / 2, h / 2 + 2);
+  })), 0, 0.5, 0.66, false);
   scene.add(g);
 }
 const driveCounter = new THREE.Group();
+let driveGuard, driveNeon, driveScreen, driveTrim, driveAwning;
 const driveTopMat = ownMat('#f6e3c3'), driveMat = ownMat('#b8743f');
 {
   const c = DRIVE_COUNTER;
@@ -1628,26 +1679,90 @@ const driveTopMat = ownMat('#f6e3c3'), driveMat = ownMat('#b8743f');
   add(driveCounter, gBox(1.3, 0.12, 4.4, 0.05), driveTopMat, 0, 1.0, 0);
   const rz = Z(DRIVE_CASHIER.y) - driveCounter.position.z;
   add(driveCounter, gBox(0.48, 0.22, 0.62, 0.05), '#3a3f4b', 0.1, 1.17, rz);
+  driveGuard = add(driveCounter, gBox(0.03, 0.35, 4.2, 0.01), GLASS, -0.5, 1.25, 0, false);
+  driveNeon = add(driveCounter, new THREE.BoxGeometry(0.04, 0.05, 4.2), BASIC('#ff6fb5'), 0.6, 0.88, 0, false);
+  driveTrim = new THREE.Group(); driveCounter.add(driveTrim);
+  for (const x of [-0.6, 0.6]) add(driveTrim, new THREE.BoxGeometry(0.06, 0.05, 4.44), M('#f5c242', { metalness: 0.3, roughness: 0.35 }), x, 1.08, 0, false);
+  add(driveNeon, new THREE.BoxGeometry(1.1, 0.05, 0.04), BASIC('#ff6fb5'), -0.6, 0, 2.13, false);
+  driveScreen = new THREE.Group(); driveScreen.position.set(0, 1.06, -1.98); driveCounter.add(driveScreen);
+  add(driveScreen, gBox(0.1, 0.45, 0.1, 0.02), '#2f3136', 0, 0.22, 0);
+  const dsFace = new THREE.Group(); dsFace.position.set(0.03, 0.75, 0); dsFace.rotation.y = Math.PI / 4; driveScreen.add(dsFace);
+  add(dsFace, gBox(0.34, 0.62, 0.06, 0.02), '#1d2127', 0, 0, 0);
+  add(dsFace, new THREE.PlaneGeometry(0.3, 0.55), glowMat('#52e0ff', 0.9), 0, 0, 0.035, false);
+  // Lv 3: a striped awning over the car-side window.
+  driveAwning = new THREE.Group(); driveAwning.position.set(-0.9, 0, 1.3); driveCounter.add(driveAwning);
+  rotated(add(driveAwning, new THREE.BoxGeometry(1.1, 0.06, 1.5), new THREE.MeshStandardMaterial({ map: TEX.stripes, side: THREE.DoubleSide }), 0, 2.05, 0), 0, 0, 0.18);
+  for (const z of [-0.65, 0.65]) add(driveAwning, gCyl(0.03, 0.03, 2.0, 8), '#d9dde2', 0.3, 1.0, z);
   scene.add(driveCounter);
 }
 
 // ---- dynamic object builders ----
+// Oven: Lv 1 clay dome, Lv 2 brick arch and wood stack, Lv 3 steel deck oven,
+// Lv 4 smart conveyor oven, Lv 5 plasma chamber oven.
 function makeOvenObj() {
   const root = new THREE.Group();
+  const domeMat = ownMat('#d36d40'), ringMat = ownMat('#8f3d22'), bodyMat = ownMat('#6b737d'), accentMat = ownMat('#c47a3a');
+  const chimneyMat = ownMat('#7d8389');
+  const clay = new THREE.Group(), brick = new THREE.Group(), chimney = new THREE.Group();
+  const deck = new THREE.Group(), smart = new THREE.Group(), future = new THREE.Group();
+  root.add(clay, brick, chimney, deck, smart, future);
   add(root, gBox(2.3, 0.85, 1.9, 0.08), '#a3a8ae', 0, 0.425, 0);
-  const domeMat = ownMat('#d36d40'), ringMat = ownMat('#8f3d22');
-  const dome = add(root, G('dome', () => new THREE.SphereGeometry(1.1, 28, 16, 0, Math.PI * 2, 0, Math.PI / 2)), domeMat, 0, 0.85, -0.05);
-  dome.scale.set(1, 0.95, 0.85);
-  add(root, G('ovenRing', () => new THREE.TorusGeometry(0.5, 0.1, 10, 24, Math.PI)), ringMat, 0, 0.85, 0.84);
-  add(root, G('ovenMouth', () => new THREE.CircleGeometry(0.48, 24, 0, Math.PI)), BASIC('#1c0d05'), 0, 0.86, 0.86, false);
-  const fire = add(root, gSph(0.25, 14, 10), BASIC('#ffb23a'), 0, 0.92, 0.85, false);
-  const ember = add(root, gSph(0.16, 12, 8), BASIC('#ff6a1f'), 0.15, 0.9, 0.87, false);
-  add(root, gCyl(0.17, 0.19, 1.0, 14), '#7d8389', 0.45, 1.75, -0.35);
-  add(root, gCyl(0.22, 0.22, 0.1, 14), '#5e6369', 0.45, 2.28, -0.35);
   add(root, gBox(1.7, 0.1, 0.65, 0.03), '#c48a55', 0, 0.8, 1.25);
+
+  const dome = add(clay, G('dome', () => new THREE.SphereGeometry(1.1, 28, 16, 0, Math.PI * 2, 0, Math.PI / 2)), domeMat, 0, 0.85, -0.05);
+  dome.scale.set(1, 0.95, 0.85);
+  add(clay, G('ovenRing', () => new THREE.TorusGeometry(0.5, 0.1, 10, 24, Math.PI)), ringMat, 0, 0.85, 0.84);
+  add(clay, G('ovenMouth', () => new THREE.CircleGeometry(0.48, 24, 0, Math.PI)), BASIC('#1c0d05'), 0, 0.86, 0.86, false);
+  const fire = add(clay, gSph(0.25, 14, 10), BASIC('#ffb23a'), 0, 0.92, 0.85, false);
+  const ember = add(clay, gSph(0.16, 12, 8), BASIC('#ff6a1f'), 0.15, 0.9, 0.87, false);
+  add(chimney, gCyl(0.17, 0.19, 1.0, 14), chimneyMat, 0.45, 1.75, -0.35);
+  add(chimney, gCyl(0.22, 0.22, 0.1, 14), chimneyMat, 0.45, 2.28, -0.35);
+
+  // Lv 2: a brick arch around the mouth and a stack of logs beside the oven.
+  for (let i = 0; i < 7; i++) {
+    const a = i / 6 * Math.PI;
+    const b = add(brick, gBox(0.24, 0.2, 0.16, 0.02), i % 2 ? '#a8452d' : '#c1553a', Math.cos(a) * 0.66, 0.85 + Math.sin(a) * 0.66, 0.84);
+    b.rotation.z = a - Math.PI / 2;
+  }
+  for (const [y, z] of [[0.1, 0.35], [0.1, 0.62], [0.3, 0.48]]) rotated(add(brick, gCyl(0.1, 0.1, 0.9, 8), '#7a4b2a', 1.38, y, z), Math.PI / 2);
+
+  // Lv 3: a stainless cabinet with a glass window, handle, dials and a copper skirt.
+  add(deck, gBox(2.25, 0.8, 1.75, 0.07), bodyMat, 0, 1.25, 0);
+  add(deck, gBox(2.3, 0.05, 1.8, 0.02), accentMat, 0, 0.9, 0);
+  add(deck, gBox(1.52, 0.52, 0.06, 0.02), '#1d2127', 0, 1.2, 0.89);
+  add(deck, new THREE.PlaneGeometry(1.36, 0.4), BASIC('#ff8a2a'), 0, 1.2, 0.925, false);
+  rotated(add(deck, gCyl(0.035, 0.035, 1.5, 8), '#d9dde2', 0, 1.5, 1.0), 0, 0, Math.PI / 2);
+  for (const x of [-0.7, 0.7]) rotated(add(deck, gCyl(0.03, 0.03, 0.14, 8), '#d9dde2', x, 1.5, 0.94), Math.PI / 2);
+  for (const y of [1.5, 1.33, 1.16]) rotated(add(deck, gCyl(0.06, 0.06, 0.08, 12), '#1d2127', 0.98, y, 0.9), Math.PI / 2);
+
+  // Lv 4: a black tunnel oven with a moving belt, a temperature display and LED trim.
+  add(smart, gBox(2.3, 0.95, 1.55, 0.09), bodyMat, 0, 1.33, -0.05);
+  add(smart, gBox(1.9, 0.5, 0.05, 0.02), '#0b0d10', 0, 1.1, 0.74);
+  add(smart, gBox(2.34, 0.05, 1.6, 0.02), accentMat, 0, 0.9, -0.05);
+  add(smart, new THREE.PlaneGeometry(0.9, 0.34), new THREE.MeshBasicMaterial({ map: FX.lcd, toneMapped: false }), -0.55, 1.6, 0.735, false);
+  const strip = glowMat('#52e0ff');
+  add(smart, new THREE.BoxGeometry(2.2, 0.04, 0.04), strip, 0, 1.78, 0.74, false);
+  add(smart, new THREE.BoxGeometry(0.04, 0.5, 0.04), strip, -0.98, 1.1, 0.75, false);
+  add(smart, new THREE.BoxGeometry(0.04, 0.5, 0.04), strip, 0.98, 1.1, 0.75, false);
+  add(smart, new THREE.BoxGeometry(1.7, 0.03, 0.62), new THREE.MeshStandardMaterial({ map: FX.belt, roughness: 0.6 }), 0, 0.845, 1.25, false);
+
+  // Lv 5: a gold pedestal, an open glass dome over a plasma core, a spinning ring and a delivery chute.
+  add(future, gCyl(0.95, 1.05, 0.3, 28), bodyMat, 0, 1.0, -0.1);
+  add(future, G('glassDome', () => new THREE.SphereGeometry(0.85, 28, 16, 0, Math.PI * 2, 0, Math.PI / 2)), GLASS, 0, 1.15, -0.1, false);
+  rotated(add(future, torus(0.85, 0.05), bodyMat, 0, 1.17, -0.1), Math.PI / 2);
+  add(future, gCyl(0.1, 0.16, 0.14, 12), bodyMat, 0, 2.02, -0.1);
+  const core = add(future, gSph(0.34, 18, 12), glowMat('#ffb35a'), 0, 1.5, -0.1, false);
+  const spin = new THREE.Group(); spin.position.set(0, 2.5, -0.1); future.add(spin);
+  rotated(add(spin, torus(1.0, 0.03), glowMat('#6fe3ff'), 0, 0, 0, false), Math.PI / 2);
+  for (const a of [0, Math.PI]) add(spin, gSph(0.07, 10, 8), glowMat('#fff1c4'), Math.cos(a), 0, Math.sin(a), false);
+  const pulse = glowMat('#6fe3ff', 0.8);
+  rotated(add(future, torus(1.45, 0.04), pulse, 0, 0.03, -0.1, false), Math.PI / 2);
+  const chute = add(future, gBox(0.9, 0.1, 0.8, 0.03), bodyMat, 0, 0.93, 0.95); chute.rotation.x = 0.12;
+  add(future, new THREE.BoxGeometry(0.8, 0.03, 0.04), pulse, 0, 0.99, 1.33, false);
+
   const light = new THREE.PointLight('#ff9a3c', 1.5, 3, 2);
   light.position.set(0, 0.9, 1.4); root.add(light);
-  return { root, fire, ember, light, domeMat, ringMat };
+  return { root, fire, ember, light, domeMat, ringMat, bodyMat, accentMat, chimneyMat, clay, brick, chimney, deck, smart, future, spin, core, pulse };
 }
 
 function makeSodaObj() {
@@ -1672,6 +1787,76 @@ function makeCreamObj() {
   add(root, gBox(0.06, 0.3, 1.2, 0.02), '#ff9ec4', 0.63, 0.5, 0);
   return { root, bodyMat };
 }
+function makeSideObj() {
+  const root = new THREE.Group();
+  const bodyMat = ownMat('#f6efe6');
+  add(root, gBox(1.3, 1.05, 1.5, 0.1), bodyMat, 0, 0.525, 0);
+  add(root, gBox(1.38, 0.08, 1.58, 0.04), '#ffffff', 0, 1.09, 0);
+  add(root, gBox(0.62, 0.06, 1.3, 0.02), '#c9ccd1', 0.95, 0.42, 0);
+  const sign = add(root, new THREE.PlaneGeometry(0.7, 0.4), decalMat(canvasTex(128, 64, (c, w, h) => {
+    c.textAlign = 'center'; c.textBaseline = 'middle'; c.font = `40px ${UI_FONT}`; c.fillText(itemInfo('side').icon, w / 2, h / 2 + 2);
+  })), 0.67, 0.72, 0, false);
+  sign.rotation.y = Math.PI / 2;
+  return { root, bodyMat };
+}
+
+// Drink and dessert stations: Lv 1 plain cabinet, Lv 2 dispensers on top, Lv 3 steel trim and LEDs,
+// Lv 4 touch screen, Lv 5 floating hologram.
+const STATION_SHAPE = { soda: { top: 1.6, fx: 0.65, hz: 0.7 }, cream: { top: 0.87, fx: 0.625, hz: 0.8 }, side: { top: 1.13, fx: 0.66, hz: 0.75 } };
+function makeStationObj(o) {
+  const kind = o.type, { top, fx, hz } = STATION_SHAPE[kind];
+  const base = { soda: makeSodaObj, cream: makeCreamObj, side: makeSideObj }[kind]();
+  const { root, bodyMat } = base;
+  const led = { soda: '#ff4d6d', cream: '#6fe3ff', side: loc().side.led }[kind];
+  const glow = glowMat(led, 0.9), icon = itemInfo(kind).icon;
+  const steel = M('#e6e9ee', { metalness: 0.2, roughness: 0.35 });
+  const t2 = new THREE.Group(), t3 = new THREE.Group(), t4 = new THREE.Group(), t5 = new THREE.Group();
+  root.add(t2, t3, t4, t5);
+  const iconTex = () => canvasTex(128, 128, (c, w, h) => { c.textAlign = 'center'; c.textBaseline = 'middle'; c.font = `84px ${UI_FONT}`; c.fillText(icon, w / 2, h / 2 + 6); });
+
+  if (kind === 'soda') {
+    add(t2, gBox(0.2, 0.18, 1.1, 0.04), steel, -0.2, top + 0.5, 0);
+    for (const z of [-0.45, 0.45]) add(t2, gCyl(0.08, 0.08, 0.5, 10), steel, -0.2, top + 0.25, z);
+    [-0.35, 0, 0.35].forEach((z, i) => {
+      add(t2, gCyl(0.05, 0.05, 0.2, 8), steel, -0.2, top + 0.34, z);
+      add(t2, gCyl(0.045, 0.045, 0.26, 8), ['#ff4d6d', '#ffffff', '#f5c242'][i], -0.2, top + 0.72, z);
+    });
+  } else if (kind === 'cream') {
+    add(t2, gBox(0.55, 0.5, 0.7, 0.05), steel, -0.2, top + 0.28, -0.3);
+    add(t2, gCyl(0.13, 0.03, 0.22, 12), steel, 0.15, top + 0.3, 0.45);
+    [[0.14, 0.02], [0.1, 0.12], [0.065, 0.2]].forEach(([r, y]) => add(t2, gSph(r, 12, 8), '#fff4e0', 0.15, top + y + 0.05, 0.45));
+  } else {
+    add(t2, gBox(0.5, 0.38, 0.5, 0.05), '#3a3f4b', -0.1, top + 0.23, -0.4);
+    add(t2, gSph(0.05, 8, 6), '#ff4d6d', 0.12, top + 0.45, -0.4);
+    add(t2, gCyl(0.28, 0.25, 0.3, 16), steel, -0.15, top + 0.19, 0.38);
+    add(t2, gSph(0.24, 14, 8), '#3b2a20', -0.15, top + 0.32, 0.38).scale.y = 0.3;
+    add(t2, gCyl(0.14, 0.14, 0.55, 14), '#ffffff', 0.3, top + 0.3, -0.45);
+  }
+
+  add(t3, gBox(1.36, 0.04, hz * 2 + 0.08, 0.01), steel, 0, top + 0.02, 0);
+  for (const y of [top * 0.3, top * 0.72]) {
+    add(t3, new THREE.BoxGeometry(0.04, 0.05, hz * 2 - 0.2), glow, fx + 0.03, y, 0, false);
+    add(t3, new THREE.BoxGeometry(fx * 2 - 0.2, 0.05, 0.04), glow, 0, y, hz + 0.03, false);
+  }
+
+  // The screen turns toward the camera, which looks from the south.
+  const screen = new THREE.Group(); screen.position.set(0.45, top + 0.5, kind === 'cream' ? -0.2 : 0);
+  screen.rotation.order = 'YXZ'; screen.rotation.set(-0.2, Math.PI / 4, 0); t4.add(screen);
+  add(screen, gBox(0.78, 0.5, 0.07, 0.02), '#1d2127', 0, 0, 0);
+  add(screen, new THREE.PlaneGeometry(0.68, 0.42), new THREE.MeshBasicMaterial({ map: canvasTex(128, 80, (c, w, h) => {
+    c.fillStyle = '#06222b'; c.fillRect(0, 0, w, h); c.textAlign = 'center'; c.textBaseline = 'middle';
+    c.font = `44px ${UI_FONT}`; c.fillText(icon, w / 2, 32);
+    c.fillStyle = led; c.font = `900 16px ${UI_FONT}`; c.fillText('TAP TO ORDER', w / 2, 66);
+  }), toneMapped: false }), 0, 0, 0.04, false);
+  add(t4, gCyl(0.05, 0.05, 0.28, 8), steel, 0.45, top + 0.14, kind === 'cream' ? -0.2 : 0);
+
+  const holo = new THREE.Group(); holo.position.set(-0.05, top + 0.9, 0); t5.add(holo);
+  rotated(add(holo, torus(0.5, 0.025), glow, 0, 0, 0, false), Math.PI / 2);
+  const face = add(holo, new THREE.PlaneGeometry(0.55, 0.55), new THREE.MeshBasicMaterial({ map: iconTex(), transparent: true, side: THREE.DoubleSide, depthWrite: false, toneMapped: false }), 0, 0, 0, false);
+  for (const a of [0, Math.PI]) add(holo, gSph(0.05, 8, 6), glow, Math.cos(a) * 0.5, 0, Math.sin(a) * 0.5, false);
+  add(t5, gCyl(0.05, 0.12, 0.3, 12), glowMat(led, 0.35), -0.05, top + 0.42, 0, false);
+  return { root, bodyMat, t2, t3, t4, t5, holo, glow, baseY: top + 0.9 };
+}
 
 function makeTableObj() {
   const root = new THREE.Group();
@@ -1681,6 +1866,7 @@ function makeTableObj() {
   const crust = M('#e2a75e'), pizzaTop = new THREE.MeshStandardMaterial({ map: TEX.pizza, roughness: 0.8 });
   const coin = M('#f5c242', { metalness: 0.5, roughness: 0.35 });
   // Per seat: a chair, a plate with a 4-slice pizza, and dirty dishes.
+  const cushionMat = ownMat('#e8473b');
   const seats = SEATS.map(st => {
     const sx = st.dx * U, south = st.dy > 0, pz = south ? 0.3 : -0.3;
     const chair = new THREE.Group(); chair.position.set(sx, 0, st.dy * U); root.add(chair);
@@ -1697,7 +1883,8 @@ function makeTableObj() {
     const dirty = new THREE.Group(); root.add(dirty);
     for (let i = 0; i < 4; i++) add(dirty, gSph(0.035, 6, 4), '#b07a3a', sx + Math.sin(i * 2.3) * 0.12, 0.915, pz + Math.cos(i * 1.7) * 0.1, false);
     add(dirty, gCyl(0.08, 0.08, 0.03, 12), coin, sx + (sx > 0 ? 0.3 : -0.3), 0.885, pz);
-    return { chair, plate, slices, dirty };
+    const cushion = add(chair, gBox(0.54, 0.07, 0.5, 0.03), cushionMat, 0, 0.56, 0);
+    return { chair, plate, slices, dirty, cushion };
   });
   // Lv 2: flower vase, Lv 3: candle, Lv 4: linen cloth, Lv 5: gold chairs.
   const vase = new THREE.Group(); vase.position.set(-0.14, 0.87, 0); root.add(vase);
@@ -1711,7 +1898,19 @@ function makeTableObj() {
   const parasol = new THREE.Group(); parasol.position.x = 1.4; root.add(parasol);
   add(parasol, gCyl(0.025, 0.025, 2.15, 8), '#fff5d9', 0, 1.075, 0);
   add(parasol, gCyl(0, 0.9, 0.4, 8), new THREE.MeshStandardMaterial({ map: TEX.stripes, side: THREE.DoubleSide }), 0, 2.15, 0);
-  return { root, seats, cloth, chairMat, vase, candle, parasol };
+  const tablet = new THREE.Group(); tablet.position.set(0.18, 0.87, 0); root.add(tablet);
+  add(tablet, gBox(0.2, 0.03, 0.14, 0.01), '#2f3136', 0, 0.015, 0);
+  const tabScreen = add(tablet, gBox(0.3, 0.2, 0.025, 0.01), '#1d2127', 0, 0.14, 0); tabScreen.rotation.x = -0.35;
+  add(tabScreen, new THREE.PlaneGeometry(0.26, 0.16), new THREE.MeshBasicMaterial({ color: '#6fe3ff', toneMapped: false }), 0, 0, 0.015, false);
+  const orb = new THREE.Group(); orb.position.set(-0.14, 0.87, 0); root.add(orb);
+  add(orb, gCyl(0.06, 0.08, 0.04, 14), '#2f3136', 0, 0.02, 0);
+  add(orb, gSph(0.1, 14, 10), glowMat('#8ff3ff', 0.85), 0, 0.22, 0, false);
+  const orbRing = rotated(add(orb, torus(0.17, 0.012), glowMat('#ffd36a'), 0, 0.22, 0, false), Math.PI / 2);
+  const underglow = new THREE.Group(); root.add(underglow);
+  const ug = glowMat('#6fe3ff', 0.9);
+  for (const [w, d, x, z] of [[2.1, 0.04, 0, -0.64], [2.1, 0.04, 0, 0.64], [0.04, 1.32, -1.04, 0], [0.04, 1.32, 1.04, 0]])
+    add(underglow, new THREE.BoxGeometry(w, 0.04, d), ug, x, 0.74, z, false);
+  return { root, seats, cloth, chairMat, cushionMat, vase, candle, parasol, tablet, orb, orbRing, underglow, ug };
 }
 
 function makePersonObj(e) {
@@ -1791,7 +1990,7 @@ function makeZoneObj(d) {
 }
 function drawZone(o, d) {
   const cost = zoneCost(d), paid = L.paid[d.id] || 0, left = Math.ceil(cost - paid), afford = S.money >= cost - paid;
-  const info = d.id === 'soda' && loc().special.drinkName ? itemInfo('soda') : d;
+  const info = zoneInfo(d);
   const key = `${left}|${afford}|${info.name}`;
   if (key === o.key) return;
   o.key = key;
@@ -1886,11 +2085,18 @@ const cupBodyMat = ownMat('#e8473b'), cupTopMat = ownMat('#ffffff');
 const cupIM = instanced(new THREE.CylinderGeometry(0.15, 0.11, 0.3, 14), [cupBodyMat, cupTopMat, M('#ffffff')], 600);
 const coneIM = instanced(new THREE.CylinderGeometry(0.13, 0.025, 0.26, 12), M('#d9a35b'), 600);
 const scoopIM = instanced(new THREE.SphereGeometry(0.15, 12, 10), M('#ff9ec4'), 600);
-const ITEM_H = { pizza: BOX_H, soda: 0.3, cream: 0.4 };
+const sideCupMat = ownMat('#c8a27a');
+const sideIM = instanced(new THREE.CylinderGeometry(0.15, 0.11, 0.34, 14), sideCupMat, 400);
+const sideLidIM = instanced(new THREE.CylinderGeometry(0.16, 0.16, 0.04, 14), M('#ffffff'), 400);
+const strawIM = instanced(new THREE.CylinderGeometry(0.018, 0.018, 0.26, 6), M('#ff5d8f'), 400);
+const applySideColor = () => sideCupMat.color.set(loc().side.cup);
+applySideColor();
+const ITEM_H = { pizza: BOX_H, soda: 0.3, cream: 0.4, side: 0.4 };
 // Draws one item standing on height y.
 function pushItem(t, x, y, z, r = 0) {
   if (t === 'pizza') pushInst(boxIM, x, y + 0.065, z, r);
   else if (t === 'soda') pushInst(cupIM, x, y + 0.15, z, r);
+  else if (t === 'side') { pushInst(sideIM, x, y + 0.17, z, r); pushInst(sideLidIM, x, y + 0.36, z, r); pushInst(strawIM, x + 0.02, y + 0.5, z, r, 0, 0.12); }
   else { pushInst(coneIM, x, y + 0.13, z, r); pushInst(scoopIM, x, y + 0.3, z, r); }
 }
 
@@ -1992,13 +2198,25 @@ function animPerson(e, dt) {
 function syncScene(dt) {
   syncFrame++;
   boxIM.count = billIM.count = coinIM.count = confIM.count = cupIM.count = coneIM.count = scoopIM.count = 0;
+  sideIM.count = sideLidIM.count = strawIM.count = 0;
+  FX.belt.offset.x = -(time * 0.35) % 1;
   const max = ovenMax(L.up.oven);
 
   for (const k in ovenMats) ovenMats[k].visible = false;
   for (const o of ovens) {
     const ob = objFor(o, makeOvenObj);
-    applyLevel(ob, o.id, l => { const k = OVEN_LOOK[l - 1]; setLook(ob.domeMat, k.dome, k.m, k.r); setLook(ob.ringMat, k.ring, k.m, k.r); });
+    applyLevel(ob, o.id, l => {
+      const k = OVEN_LOOK[l - 1];
+      setLook(ob.domeMat, k.dome, k.m, k.r); setLook(ob.ringMat, k.ring, k.m, k.r);
+      setLook(ob.bodyMat, k.dome, k.m, k.r); setLook(ob.accentMat, k.ring, k.m, k.r);
+      setLook(ob.chimneyMat, ['#7d8389', '#8a4a38', '#9aa1a8', '#2f3136', '#fff1c4'][l - 1], l >= 3 ? 0.5 : 0, l >= 3 ? 0.35 : 0.8);
+      ob.clay.visible = l <= 2; ob.brick.visible = l === 2; ob.chimney.visible = l <= 4;
+      ob.deck.visible = l === 3; ob.smart.visible = l === 4; ob.future.visible = l === 5;
+      ob.light.color.set(['#ff9a3c', '#ff8a3c', '#ffb06a', '#6fe3ff', '#ffd9a0'][l - 1]);
+    });
     popScale(ob);
+    ob.spin.rotation.y = time * 1.4; ob.core.scale.setScalar(1 + Math.sin(time * 5 + o.x) * 0.1);
+    ob.pulse.opacity = 0.65 + 0.35 * Math.sin(time * 3 + o.x);
     const x = X(o.x), z = Z(o.y);
     ob.root.position.set(x, 0, z);
     const f = 0.85 + Math.sin(time * 13 + x) * 0.12 + Math.sin(time * 7.3 + x) * 0.08;
@@ -2013,12 +2231,18 @@ function syncScene(dt) {
 
   for (const k in stationMats) stationMats[k].visible = false;
   for (const o of stations) {
-    const ob = objFor(o, o.type === 'soda' ? makeSodaObj : makeCreamObj);
-    applyLevel(ob, o.id, l => { const sh = shinyAt(l); setLook(ob.bodyMat, STATION_LOOK[o.type][l - 1], sh.m, sh.r); });
+    const ob = objFor(o, makeStationObj);
+    applyLevel(ob, o.id, l => {
+      const sh = shinyAt(l); setLook(ob.bodyMat, STATION_LOOK[o.type][l - 1], sh.m, sh.r);
+      ob.t2.visible = l >= 2; ob.t3.visible = l >= 3; ob.t4.visible = l >= 4; ob.t5.visible = l >= 5;
+    });
     popScale(ob);
+    ob.holo.rotation.y = time * 1.3; ob.holo.position.y = ob.baseY + Math.sin(time * 2 + o.y) * 0.05;
+    ob.glow.opacity = 0.7 + 0.3 * Math.sin(time * 3 + o.y);
     const x = X(o.x), z = Z(o.y);
     ob.root.position.set(x, 0, z);
     if (o.type === 'soda') for (let i = 0; i < o.stock; i++) pushItem('soda', x + 0.95, 0.45 + Math.floor(i / 3) * 0.3, z + (i % 3 - 1) * 0.4);
+    else if (o.type === 'side') for (let i = 0; i < o.stock; i++) pushItem('side', x + 0.95, 0.45 + Math.floor(i / 3) * 0.4, z + (i % 3 - 1) * 0.4);
     else for (let i = 0; i < o.stock; i++) pushItem('cream', x + (Math.floor(i / 4) % 2 ? 0.25 : -0.25), 0.9 + Math.floor(i / 8) * 0.4, z + (i % 4 - 1.5) * 0.36);
     const icon = itemInfo(o.type).icon, oldMat = stationMats[o.id];
     if (oldMat && oldMat.userData.icon !== icon) {
@@ -2039,11 +2263,14 @@ function syncScene(dt) {
     const l = counterGroup.userData.lv = lvOf('counter'), k = COUNTER_LOOK[l - 1], sh = shinyAt(l);
     setLook(counterTopMat, k.top, sh.m * 0.5, l >= 2 ? 0.3 : 0.78); setLook(counterMat, k.body); setLook(counterPanelMat, k.panel, l >= 5 ? 0.7 : 0, l >= 5 ? 0.3 : 0.78);
     counterNeon.visible = l >= 3; counterTrim.visible = l >= 5;
+    counterGuard.visible = l >= 2; counterMenu.visible = l >= 4; counterHolo.visible = l >= 5;
   }
   counterGroup.scale.setScalar(bump(equipBorn.counter));
+  counterHolo.material.opacity = 0.75 + 0.25 * Math.sin(time * 3);
   if (driveCounter.userData.lv !== lvOf('drive')) {
     const l = driveCounter.userData.lv = lvOf('drive'), k = COUNTER_LOOK[l - 1];
     setLook(driveTopMat, k.top, 0, l >= 2 ? 0.3 : 0.78); setLook(driveMat, k.body);
+    driveGuard.visible = l >= 2; driveNeon.visible = driveAwning.visible = l >= 3; driveScreen.visible = l >= 4; driveTrim.visible = l >= 5;
   }
 
   // counter stock
@@ -2058,7 +2285,9 @@ function syncScene(dt) {
   // Soda and dessert: 3 per layer, up to 5 layers; larger amounts show a count.
   for (let i = 0; i < Math.min(L.soda, 15); i++) pushItem('soda', X(704), 1.06 + Math.floor(i / 3) * 0.3, cz + (i % 3 - 1) * 0.4);
   for (let i = 0; i < Math.min(L.cream, 15); i++) pushItem('cream', X(776), 1.06 + Math.floor(i / 3) * 0.4, cz + (i % 3 - 1) * 0.4);
+  for (let i = 0; i < Math.min(L.side, 10); i++) pushItem('side', X(685), 1.06 + Math.floor(i / 2) * 0.4, cz + (i % 2 ? 0.3 : -0.3));
   if (L.soda > 15) label('csoda', X(704), 2.75, cz, `<span class="tag">${itemInfo('soda').icon}×${L.soda}</span>`);
+  if (L.side > 10) label('cside', X(685), 3.25, cz, `<span class="tag">${itemInfo('side').icon}×${L.side}</span>`);
   if (L.cream > 15) label('ccream', X(776), 3.25, cz, `<span class="tag">🍦×${L.cream}</span>`);
   if (L.counter >= counterCap('pizza')) label('cfull', X(COUNTER.x + 66), 3.0, cz, '<span class="tag">FULL</span>');
 
@@ -2079,7 +2308,10 @@ function syncScene(dt) {
     const dx = driveCounter.position.x, sz = Z(DRIVE_COUNTER.y + 22) + 2.0, cz2 = sz + 0.42;
     for (let i = 0; i < Math.min(L.dsoda, 8); i++) pushItem('soda', dx + (i % 2 ? 0.3 : -0.3), 1.06 + Math.floor(i / 2) * 0.3, sz);
     for (let i = 0; i < Math.min(L.dcream, 8); i++) pushItem('cream', dx + (i % 2 ? 0.3 : -0.3), 1.06 + Math.floor(i / 2) * 0.4, cz2);
+    const dz3 = Z(DRIVE_COUNTER.y + 22) + 3.4;
+    for (let i = 0; i < Math.min(L.dside, 8); i++) pushItem('side', dx + (i % 2 ? 0.3 : -0.3), 1.06 + Math.floor(i / 2) * 0.4, dz3);
     if (L.dsoda > 8) label('dsoda', dx, 2.5, sz, `<span class="tag">${itemInfo('soda').icon}×${L.dsoda}</span>`);
+    if (L.dside > 8) label('dside', dx, 3.0, dz3, `<span class="tag">${itemInfo('side').icon}×${L.dside}</span>`);
     if (L.dcream > 8) label('dcream', dx, 2.9, cz2, `<span class="tag">🍦×${L.dcream}</span>`);
   }
 
@@ -2087,13 +2319,18 @@ function syncScene(dt) {
   for (const t of tables) {
     const ob = objFor(t, makeTableObj);
     applyLevel(ob, t.id, l => {
-      ob.vase.visible = l >= 2; ob.candle.visible = l >= 3;
+      ob.vase.visible = l >= 2 && l <= 4; ob.candle.visible = l === 3;
+      ob.tablet.visible = l >= 4; ob.orb.visible = l >= 5; ob.underglow.visible = l >= 5;
+      setLook(ob.cushionMat, ['#e8473b', '#e8473b', '#e8473b', '#2f3b52', '#fff1c4'][l - 1]);
+      for (const so of ob.seats) so.cushion.visible = l >= 3;
       ob.cloth.map = l >= 4 ? TEX.linen : TEX.cloth; ob.cloth.needsUpdate = true;
       if (l >= 5) setLook(ob.chairMat, '#f5c242', 0.6, 0.3); else setLook(ob.chairMat, '#c98a4b');
     });
     popScale(ob);
     ob.root.position.set(X(t.x), 0, Z(t.y));
     ob.parasol.visible = !!loc().special.parasols;
+    ob.orb.position.y = 0.87 + Math.sin(time * 2 + t.x) * 0.03; ob.orbRing.rotation.z = time * 2;
+    ob.ug.opacity = 0.65 + 0.35 * Math.sin(time * 2.5 + t.y);
     const n = seatCount(t);
     ob.seats.forEach((so, i) => {
       const seat = t.seats[i], c = seat.occupant, eating = c && c.state === 'eat';
@@ -2188,7 +2425,7 @@ function syncScene(dt) {
     }
   }
 
-  for (const im of [boxIM, billIM, coinIM, confIM, cupIM, coneIM, scoopIM]) im.instanceMatrix.needsUpdate = true;
+  for (const im of [boxIM, billIM, coinIM, confIM, cupIM, coneIM, scoopIM, sideIM, sideLidIM, strawIM]) im.instanceMatrix.needsUpdate = true;
   if (confIM.instanceColor) confIM.instanceColor.needsUpdate = true;
 
   // remove objects whose entity is gone
