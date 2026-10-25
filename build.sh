@@ -12,6 +12,7 @@ swiftc -O -o "$APP/Contents/MacOS/PizzaReady" mac/main.swift -framework Cocoa -f
 swift mac/make-icon.swift "$BUILD/AppIcon.iconset"
 iconutil -c icns "$BUILD/AppIcon.iconset" -o "$APP/Contents/Resources/AppIcon.icns"
 cp index.html "$APP/Contents/Resources/"
+cp -R vendor "$APP/Contents/Resources/"
 cp mac/Info.plist "$APP/Contents/"
 codesign --force --deep -s - "$APP"
 rm -rf "$BUILD"
