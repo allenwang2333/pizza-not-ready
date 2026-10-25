@@ -437,15 +437,15 @@ test('diners skip a dirty table even when it has enough clean seats', () => {
   }
 });
 
-test('the first clean table with enough free seats is used before later tables', () => {
+test('a nearer clean table is used even when it appears later in the table list', () => {
   const run = game();
   run(diningRoom + `
     L.unlocked.table3 = true; L.lv.table3 = 3; syncWorld();
     tables[0].dirty = true; tables[0].seats[0].dirty = true;
-    const c = spawnCustomer(3); finishOrder(c);
+    const c = spawnCustomer(3); c.x = QUEUE_X; c.y = QUEUE_Y; finishOrder(c);
   `);
-  assert.equal(run('walkers.every(c => c.table === tables[1])'), true);
-  assert.equal(run('tables[2].seats.every(s => !s.occupant)'), true);
+  assert.equal(run('walkers.every(c => c.table === tables[2])'), true);
+  assert.equal(run('tables[1].seats.every(s => !s.occupant)'), true);
 });
 
 test('diners take food away when every table is dirty, then reuse the first table after cleaning', () => {
@@ -458,4 +458,85 @@ test('diners take food away when every table is dirty, then reuse the first tabl
   run('cleanTable(tables[0], false); const diners = spawnCustomer(2); finishOrder(diners);');
   assert.equal(run('tables[0].seats.filter(s => s.occupant).length'), 2);
   assert.equal(run('tables[1].seats.every(s => !s.occupant)'), true);
+});
+
+const leftDiningRoom = diningRoom + `L.unlocked.table8 = true; L.lv.table8 = 3; syncWorld();`;
+
+test('a nearby left-side table is used before available right-side tables', () => {
+  const run = game();
+  run(leftDiningRoom + `const c = spawnCustomer(4); c.x = QUEUE_X; c.y = QUEUE_Y;
+    const orderBefore = tables.map(t => t.id).join(','); finishOrder(c);
+  `);
+  assert.equal(run('walkers.every(c => c.table.id === "table8")'), true);
+  assert.equal(run('new Set(walkers.map(c => c.seat)).size'), 4);
+  assert.equal(run('tables.slice(0, 2).every(t => t.seats.every(s => !s.occupant))'), true);
+  assert.equal(run('tables.map(t => t.id).join(",")'), run('orderBefore'));
+});
+
+test('the nearest table is skipped if it is dirty or lacks enough free seats', () => {
+  for (const unavailable of ['dirty', 'too small', 'occupied']) {
+    const run = game();
+    run(leftDiningRoom + `const near = tables.find(t => t.id === 'table8');`);
+    if (unavailable === 'dirty') run('near.dirty = true; near.seats[0].dirty = true;');
+    if (unavailable === 'too small') run('L.lv.table8 = 1;');
+    if (unavailable === 'occupied') run('near.seats[0].occupant = {};');
+    run('const c = spawnCustomer(4); c.x = QUEUE_X; c.y = QUEUE_Y; finishOrder(c);');
+    assert.equal(run('walkers.every(c => c.table.id === "table1")'), true, unavailable);
+  }
+});
+
+test('distance is measured from the diner and equal distances keep a stable table order', () => {
+  const run = game();
+  run(diningRoom + `const c = spawnCustomer(1); c.dine = true; c.x = 1110; c.y = 240; finishOrder(c);`);
+  assert.equal(run('c.table.id'), 'table2');
+  const tied = game();
+  tied(diningRoom + `const c = spawnCustomer(1); c.dine = true; c.x = 1045; c.y = 170; finishOrder(c);`);
+  assert.equal(tied('c.table.id'), 'table1');
+});
+
+test('diners prefer an empty table over a nearer clean shared table', () => {
+  const run = game();
+  run(leftDiningRoom + `const near = tables.find(t => t.id === 'table8');
+    near.seats[0].occupant = {};
+    const c = spawnCustomer(2); c.x = QUEUE_X; c.y = QUEUE_Y; finishOrder(c);
+  `);
+  assert.equal(run('c.table.id'), 'table1');
+  assert.equal(run('near.seats.filter(s => s.occupant).length'), 1);
+});
+
+test('diners share the nearest clean table only if no empty table can fit the party', () => {
+  const run = game();
+  run(leftDiningRoom + `
+    for (const t of tables) t.seats[0].occupant = {};
+    const c = spawnCustomer(2); c.x = QUEUE_X; c.y = QUEUE_Y; finishOrder(c);
+  `);
+  assert.equal(run('c.table.id'), 'table8');
+  assert.equal(run('walkers.every(d => d.table === c.table)'), true);
+});
+
+test('staff and player cleaning wait until all reserved or seated diners leave', () => {
+  for (const state of ['eat', 'walk']) {
+    const run = game();
+    run(diningRoom + `
+      L.unlocked.cleaner = true; syncWorld();
+      const t = tables[0], w = workers.find(w => w.type === 'cleaner');
+      t.dirty = true; t.seats[0].dirty = true; t.seats[0].tip = 12;
+      t.seats[1].occupant = { state: '${state}' };
+      w.x = t.x; w.y = t.y + 45; w.table = t;
+      player.x = t.x; player.y = t.y + 60;
+      L.goal = { type: 'clean', target: 100, progress: 0, reward: 0 };
+      for (let i = 0; i < 120; i++) { updateCleaner(w, 120, 1 / 60); updatePlayer(1 / 60); }
+      cleanTable(t, false); cleanTable(t, true);
+    `);
+    assert.equal(run('t.dirty'), true, state);
+    assert.equal(run('t.clean'), 0, state);
+    assert.equal(run('L.goal.progress'), 0, state);
+    assert.equal(run('t.seats[0].tip'), 12, state);
+    run('t.seats[1].occupant = null; cleanTable(t, true);');
+    assert.equal(run('t.dirty'), false);
+    assert.equal(run('S.money'), 12);
+    assert.equal(run('L.goal.progress'), 1);
+    run('cleanTable(t, true);');
+    assert.equal(run('L.goal.progress'), 1, 'a clean table cannot pay or count twice');
+  }
 });

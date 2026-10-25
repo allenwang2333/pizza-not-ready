@@ -448,6 +448,8 @@ const driveCap = t => DRIVE_CAP[t] + (t === 'pizza' ? 15 : 3) * (lvOf('drive') -
 const tableScore = (sh, ids) => ids.reduce((a, id) => a + lvOf(id, sh), 0);
 // Lv 1 seats 2, Lv 2 seats 3, Lv 3 and up seat 4.
 const seatCount = t => Math.min(4, 1 + lvOf(t.id));
+const tableEmpty = t => t.seats.every(s => !s.occupant);
+const canCleanTable = t => t.dirty && tableEmpty(t);
 const equipBorn = {};
 // Upgradable things in this shop; r is the floor area used to check whether the player is next to it.
 function equipment() {
@@ -687,7 +689,7 @@ function updatePlayer(dt) {
   }
   // clean tables
   for (const t of tables) {
-    if (t.dirty && dist(player, t) < 75) {
+    if (canCleanTable(t) && dist(player, t) < 75) {
       t.clean += dt * 1.6;
       if (t.clean >= 1) cleanTable(t, true);
     }
@@ -695,6 +697,7 @@ function updatePlayer(dt) {
 }
 
 function cleanTable(t, byPlayer) {
+  if (!canCleanTable(t)) return;
   const tip = t.seats.reduce((a, s) => a + (s.dirty ? s.tip : 0), 0);
   for (const s of t.seats) if (s.dirty) { s.dirty = false; s.tip = 0; }
   if (byPlayer) { earn(tip, t.x, t.y); sfx.cash(); }
@@ -781,7 +784,7 @@ function updateManager(w, sp, dt) {
 }
 
 function updateCleaner(w, sp, dt) {
-  if (!w.table || !w.table.dirty) w.table = tables.find(t => t.dirty) || null;
+  if (!w.table || !canCleanTable(w.table)) w.table = tables.find(canCleanTable) || null;
   if (!w.table) { const p = WORKER_POST_IDLE.cleaner; moveTo(w, p.x, p.y, sp, dt); return; }
   const t = w.table;
   if (moveTo(w, t.x, t.y + 45, sp, dt)) {
@@ -841,7 +844,10 @@ function finishOrder(c) {
   goalProgress('serve', diners.length);
   // Reserve all seats together. A group never splits across tables or waits for seats.
   const freeSeats = t => t.seats.flatMap((s, i) => i < seatCount(t) && !s.occupant && !s.dirty ? [i] : []);
-  const table = c.dine ? tables.find(t => !t.dirty && freeSeats(t).length >= diners.length) : null;
+  const available = c.dine ? tables.filter(t => !t.dirty && freeSeats(t).length >= diners.length) : [];
+  const empty = available.filter(tableEmpty);
+  const table = (empty.length ? empty : available)
+    .reduce((nearest, t) => !nearest || dist(c, t) < dist(c, nearest) ? t : nearest, null);
   const seats = table ? freeSeats(table) : [];
   if (c.personalOrder) c.order = c.personalOrder;
   c.guests = [];
@@ -1969,7 +1975,7 @@ function syncScene(dt) {
       so.plate.visible = eating || seat.dirty;
       so.dirty.visible = seat.dirty;
     });
-    if (t.dirty) label('tbl' + t.id, X(t.x), 1.9, Z(t.y),
+    if (canCleanTable(t)) label('tbl' + t.id, X(t.x), 1.9, Z(t.y),
       `<div style="text-align:center"><div class="icon">🧽</div>${t.clean > 0 ? `<div class="bar green"><i style="width:${Math.round(t.clean * 100)}%"></i></div>` : ''}</div>`);
   }
 
