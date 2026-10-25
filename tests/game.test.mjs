@@ -16,7 +16,8 @@ function game(saved) {
     addEventListener() {}, setTimeout() {}, clearTimeout() {},
     document: { getElementById() { return { classList: { add() {}, remove() {} } }; } },
   });
-  vm.runInContext(simulation + '\nfunction X(x) { return x / 40; } function Z(y) { return y / 40; } function resetScene() {}', context);
+  const purchase = 'function buyUpgrade' + html.split('function buyUpgrade')[1].split('function refreshPanel')[0];
+  vm.runInContext(simulation + purchase + '\nfunction refreshPanel() {} function X(x) { return x / 40; } function Z(y) { return y / 40; } function resetScene() {}', context);
   return code => vm.runInContext(code, context);
 }
 
@@ -657,4 +658,28 @@ test('a second cleaner does not join a claimed table or clean an occupied table'
   assert.equal(run('workers.filter(w => w.type === "cleaner" && w.table === tables[1]).length'), 0);
   run('tables[1].seats[1].occupant = null; updateWorkers(1 / 60);');
   assert.equal(run('workers.filter(w => w.type === "cleaner" && w.table === tables[1]).length'), 1);
+});
+
+test('control API reports state and rejects cheats, invalid input, and unpaid purchases', () => {
+  const run = game();
+  assert.equal(run('gameControl({ action: "state" }).money'), 0);
+  for (const command of [
+    '{ action: "money", amount: 1000 }', '{ action: "shop", index: 1 }',
+    '{ action: "keys", keys: ["KeyE"] }', '{ action: "keys", keys: ["KeyD"], duration: 5001 }',
+    '{ action: "upgrade", id: "price" }', '{ action: "upgrade", id: "invalid" }',
+    '{ action: "equipment", id: "oven1" }', '{ action: "auto", enabled: true, reserve: 0 }',
+  ]) assert.throws(() => run(`gameControl(${command})`));
+  assert.equal(run('S.money'), 0);
+  assert.equal(run('L.up.price'), 0);
+});
+
+test('control API buys at normal prices and moves through normal player updates', () => {
+  const run = game();
+  run('S.money = 100; gameControl({ action: "upgrade", id: "price" });');
+  assert.equal(run('S.money'), 40);
+  assert.equal(run('L.up.price'), 1);
+  run('const oldX = player.x; gameControl({ action: "keys", keys: ["KeyD"] }); updatePlayer(0.1);');
+  assert.equal(run('player.x - oldX'), 17);
+  run('controlKeysUntil = Date.now() - 1; const stoppedX = player.x; updatePlayer(0.1);');
+  assert.equal(run('player.x'), run('stoppedX'));
 });

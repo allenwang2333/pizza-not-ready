@@ -16,6 +16,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
     var floatItem: NSMenuItem!
     var miniItem: NSMenuItem!
     var normalFrame: NSRect?
+    var controlTimer: Timer?
+    var controlBusy = false
 
     let saveURL: URL = {
         let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
@@ -56,6 +58,46 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         buildMenu()
         if UserDefaults.standard.bool(forKey: "keepOnTop") { setFloating(true) }
         NSApp.activate(ignoringOtherApps: true)
+        if ProcessInfo.processInfo.environment["PIZZA_READY_CONTROL"] == "1" {
+            controlTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
+                MainActor.assumeIsolated { self?.pollControl() }
+            }
+        }
+    }
+
+    // Opt-in, single-client file IPC. JSON data is never treated as executable code.
+    func pollControl() {
+        let dir = saveURL.deletingLastPathComponent().appendingPathComponent("control", isDirectory: true)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true,
+                                                attributes: [.posixPermissions: 0o700])
+        let request = dir.appendingPathComponent("request.json")
+        guard !controlBusy, let data = try? Data(contentsOf: request) else { return }
+        try? FileManager.default.removeItem(at: request)
+        guard data.count <= 65536,
+              let command = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let id = command["requestId"] as? String,
+              let literal = try? JSONSerialization.data(withJSONObject: command),
+              let json = String(data: literal, encoding: .utf8) else { return }
+        controlBusy = true
+        let script = """
+        (() => { const c = \(json);
+          try { return JSON.stringify({requestId:c.requestId, ok:true, state:gameControl(c)}); }
+          catch (e) { return JSON.stringify({requestId:c.requestId, ok:false, error:String(e)}); }
+        })()
+        """
+        web.evaluateJavaScript(script) { result, error in
+            defer { self.controlBusy = false }
+            let response: String
+            if let result = result as? String { response = result }
+            else {
+                let failure: [String: Any] = ["requestId": id, "ok": false,
+                                              "error": error?.localizedDescription ?? "No response"]
+                guard let data = try? JSONSerialization.data(withJSONObject: failure),
+                      let text = String(data: data, encoding: .utf8) else { return }
+                response = text
+            }
+            try? response.write(to: dir.appendingPathComponent("response.json"), atomically: true, encoding: .utf8)
+        }
     }
 
     func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {

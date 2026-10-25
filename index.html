@@ -716,6 +716,10 @@ function earn(amt, x, y) {
 }
 
 function updatePlayer(dt) {
+  if (controlKeysUntil && Date.now() >= controlKeysUntil) {
+    for (const k of ['KeyW', 'KeyA', 'KeyS', 'KeyD']) keys[k] = false;
+    controlKeysUntil = 0;
+  }
   let vx = 0, vy = 0;
   if (keys.KeyW || keys.ArrowUp) vy--;
   if (keys.KeyS || keys.ArrowDown) vy++;
@@ -1198,6 +1202,42 @@ function creditAway(sec) {
     gain(amt); sfx.cash();
     toast(`👋 While you were away (${fmtDur(sec)}), your staff earned $${fmt(amt)}`, 5);
   }
+}
+
+// Local automation uses the same movement, purchase, and shop rules as the UI.
+let controlKeysUntil = 0;
+function gameControl(command) {
+  const action = command?.action;
+  if (action === 'keys') {
+    const allowed = ['KeyW', 'KeyA', 'KeyS', 'KeyD'];
+    if (!Array.isArray(command.keys) || command.keys.some(k => !allowed.includes(k))) throw new Error('Invalid movement keys');
+    const duration = command.duration ?? 1000;
+    if (!Number.isFinite(duration) || duration < 0 || duration > 5000) throw new Error('Invalid movement duration');
+    controlKeysUntil = Date.now() + duration;
+    for (const k of allowed) keys[k] = command.keys.includes(k);
+  } else if (action === 'shop') {
+    if (!Number.isInteger(command.index) || command.index < 0 || command.index >= S.shops.length) throw new Error('Shop not owned');
+    for (const k in keys) keys[k] = false;
+    goToShop(command.index);
+  } else if (action === 'upgrade') {
+    const u = UPGRADES.find(u => u.id === command.id);
+    if (!u || !canBuy(u)) throw new Error('Upgrade unavailable');
+    buyUpgrade(command.id);
+  } else if (action === 'equipment') {
+    if (nearestEquip()?.id !== command.id || !upgradeEquip(command.id)) throw new Error('Equipment unavailable or not nearby');
+  } else if (action === 'auto') {
+    if (typeof command.enabled !== 'boolean' || !setAutoSettings(command.enabled, command.reserve)) throw new Error('Invalid manager settings');
+  } else if (action !== 'state') {
+    throw new Error('Unknown action');
+  }
+  return {
+    money: S.money, earned: S.earned, currentShop: S.cur,
+    player: { x: player.x, y: player.y, items: [...player.items] },
+    shops: S.shops.map((sh, i) => ({ name: LOCATIONS[i].name, idleRate: idleRateFor(sh, i), ...sh })),
+    zones: visibleZones().map(d => ({ id: d.id, x: d.x, y: d.y, remaining: zoneCost(d) - (L.paid[d.id] || 0) })),
+    upgrades: UPGRADES.map(u => ({ id: u.id, level: L.up[u.id], max: u.max, cost: upCost(u), available: canBuy(u) })),
+    equipment: equipment().map(e => ({ id: e.id, x: e.x, y: e.y, level: lvOf(e.id), cost: equipCost(e.id) })),
+  };
 }
 
 // ================= 3D scene =================
