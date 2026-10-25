@@ -187,6 +187,13 @@ function fmtDur(s) {
 
 // ================= layout (game logic uses a 1200x800 top-down plane) =================
 const ROOM = { x: 90, y: 40, w: 1100, h: 730 };
+// Follow the kitchen floor edge, with gaps for the kitchen door and two side passages.
+const KITCHEN_WALLS = [
+  { x: 286, y: 352, w: 8, h: 98 }, { x: 286, y: 530, w: 8, h: 110 },
+  { x: 286, y: 720, w: 8, h: 50 }, { x: 290, y: 348, w: 250, h: 8 },
+  { x: 826, y: 40, w: 8, h: 170 }, { x: 826, y: 290, w: 8, h: 66 },
+  { x: 800, y: 348, w: 26, h: 8 },
+];
 const COUNTER = { x: 540, y: 305, w: 260, h: 48 };
 const DROP = P(600, 268), CASHIER = P(740, 268), SALES_CASHIER = P(660, 268), TRASH = P(495, 330);
 const DRIVE_COUNTER = { x: 92, y: 480, w: 46, h: 170 };
@@ -384,6 +391,7 @@ const player = {
 };
 const ovens = [], stations = [], tables = [], workers = [], queue = [], walkers = [], carQueue = [], carsOut = [];
 const zoneStand = {};
+let navGrid = null, navVersion = 0;
 let spawnT = 1.5, carT = 4, driveServeT = 0;
 const serveTimers = [0, 0];
 let rushT = rushDelay(), rushLeft = 0, vipT = rand(150, 260), vipPending = false;
@@ -409,11 +417,12 @@ function makeWorker(id) {
   return {
     id: nextId++, key: id, type, x: DOOR_X, y: 760, dir: -Math.PI / 2, moving: false, items: [], actT: 0,
     state: 'fetch', src: null, dest: 'counter', table: null,
-    off: { carrier2: 24, carrier3: -24, barista: 46, restocker: -46 }[id] || 0, seed: Math.random() * 10,
+    off: { carrier2: 24, carrier3: -24, barista: 46, restocker: -20 }[id] || 0, seed: Math.random() * 10,
     skin: pick(SKINS), hair: pick(HAIRS), ...WORKER_LOOK[type], robot: !!loc().special.staffMult,
   };
 }
 function syncWorld() {
+  navGrid = null; navVersion++;
   for (const id in OVEN_POS)
     if (L.unlocked[id] && !ovens.some(o => o.id === id))
       ovens.push({ id, type: 'pizza', ...OVEN_POS[id], pick: P(OVEN_POS[id].x, OVEN_POS[id].y + 80), stock: 0, timer: 0 });
@@ -540,13 +549,80 @@ const clerkPresent = lane => lane === 0 ? cashierPresent() : dist(player, SALES_
 const drivePresent = () => L.unlocked.drive && (dist(player, DRIVE_CASHIER) < 42 || workerAt('driver', DRIVE_CASHIER));
 
 function obstacles() {
-  const r = [COUNTER];
+  const r = [COUNTER, ...KITCHEN_WALLS];
   for (const o of ovens) r.push({ x: o.x - 50, y: o.y - 35, w: 100, h: 88 });
   for (const o of stations) r.push({ x: o.x - o.w / 2, y: o.y - o.h / 2, w: o.w, h: o.h });
   for (const t of tables) r.push({ x: t.x - 40, y: t.y - 25, w: 80, h: 48 });
   if (L.unlocked.drive) r.push(DRIVE_COUNTER);
   return r;
 }
+
+function staffPointClear(p, rects) {
+  return p.x >= ROOM.x + 10 && p.x <= ROOM.x + ROOM.w - 10 &&
+    p.y >= ROOM.y + 10 && p.y <= ROOM.y + ROOM.h - 10 &&
+    !rects.some(r => p.x > r.x - 10 && p.x < r.x + r.w + 10 && p.y > r.y - 10 && p.y < r.y + r.h + 10);
+}
+function staffSegmentClear(a, b, rects) {
+  const steps = Math.ceil(dist(a, b) / 5);
+  for (let i = 0; i <= steps; i++) {
+    const f = steps ? i / steps : 0;
+    if (!staffPointClear(P(lerp(a.x, b.x, f), lerp(a.y, b.y, f)), rects)) return false;
+  }
+  return true;
+}
+function staffMap() {
+  if (navGrid) return navGrid;
+  const rects = [...obstacles(), ...tables.map(t => ({ x: t.x - 40, y: t.y - 60, w: 80, h: 120 }))];
+  const cols = Math.floor((ROOM.w - 20) / 20) + 1, rows = Math.floor((ROOM.h - 20) / 20) + 1;
+  const point = i => P(ROOM.x + 10 + (i % cols) * 20, ROOM.y + 10 + Math.floor(i / cols) * 20);
+  const open = Array.from({ length: cols * rows }, (_, i) => staffPointClear(point(i), rects));
+  return navGrid = { rects, cols, rows, point, open };
+}
+function staffPath(from, to) {
+  const map = staffMap(), { rects, cols, rows, point, open } = map;
+  if (staffSegmentClear(from, to, rects)) return [to];
+  const nearest = p => {
+    let best = -1, distance = Infinity;
+    for (let i = 0; i < open.length; i++) if (open[i]) {
+      const d = dist(p, point(i));
+      if (d < distance && staffSegmentClear(p, point(i), rects)) { best = i; distance = d; }
+    }
+    return best;
+  };
+  if (!staffPointClear(from, rects) || !staffPointClear(to, rects)) return null;
+  const start = nearest(from), end = nearest(to);
+  if (start < 0 || end < 0) return null;
+  const prev = new Int32Array(open.length).fill(-1), pending = [start];
+  prev[start] = start;
+  for (let head = 0; head < pending.length && prev[end] < 0; head++) {
+    const i = pending[head], col = i % cols, row = Math.floor(i / cols);
+    // Only axis-aligned steps; inflated walls are wider than one grid step.
+    for (const next of [col > 0 ? i - 1 : -1, col + 1 < cols ? i + 1 : -1,
+      row > 0 ? i - cols : -1, row + 1 < rows ? i + cols : -1]) {
+      if (next >= 0 && open[next] && prev[next] < 0) { prev[next] = i; pending.push(next); }
+    }
+  }
+  if (prev[end] < 0) return null;
+  const path = [];
+  for (let i = end; i !== start; i = prev[i]) path.push(point(i));
+  path.push(point(start)); path.reverse(); path.push(to);
+  return path;
+}
+function moveStaff(w, x, y, sp, dt) {
+  const target = P(x, y), key = `${x},${y},${navVersion}`;
+  if (w.nav?.key !== key || (w.nav.points && w.nav.index === w.nav.points.length && dist(w, target) > 0.5))
+    w.nav = { key, points: staffPath(w, target), index: 0 };
+  if (!w.nav.points) { w.moving = false; return false; }
+  let budget = sp * dt;
+  while (w.nav.index < w.nav.points.length) {
+    const p = w.nav.points[w.nav.index], d = dist(w, p);
+    if (d > budget) { moveTo(w, p.x, p.y, sp, budget / sp); return false; }
+    moveTo(w, p.x, p.y, sp, d / sp); budget -= d; w.nav.index++;
+  }
+  w.moving = false;
+  return true;
+}
+
 function pushOut(e, r, rad) {
   const cx = clamp(e.x, r.x, r.x + r.w), cy = clamp(e.y, r.y, r.y + r.h);
   const dx = e.x - cx, dy = e.y - cy, d = Math.hypot(dx, dy);
@@ -720,9 +796,9 @@ function updateWorkers(dt) {
     w.actT -= dt;
     if (w.type === 'cashier' || w.type === 'salesclerk') {
       const p = w.type === 'cashier' ? CASHIER : SALES_CASHIER;
-      if (moveTo(w, p.x, p.y, sp, dt)) w.dir = Math.PI / 2;
+      if (moveStaff(w, p.x, p.y, sp, dt)) w.dir = Math.PI / 2;
     }
-    else if (w.type === 'driver') { if (moveTo(w, DRIVE_CASHIER.x, DRIVE_CASHIER.y, sp, dt)) w.dir = Math.PI; }
+    else if (w.type === 'driver') { if (moveStaff(w, DRIVE_CASHIER.x, DRIVE_CASHIER.y, sp, dt)) w.dir = Math.PI; }
     else if (w.type === 'carrier') updateCarrier(w, sp, dt, ovens);
     else if (w.type === 'barista') updateCarrier(w, sp, dt, stations);
     else if (w.type === 'restocker') updateCarrier(w, sp, dt, producers());
@@ -749,13 +825,14 @@ function updateCarrier(w, sp, dt, sources) {
       w.src = (ready.length ? ready : sources).reduce((b, o) =>
         need(o) > need(b) || (need(o) === need(b) && (o.stock > b.stock || (o.stock === b.stock && o.timer > b.timer))) ? o : b);
     const p = w.src.pick;
-    if (moveTo(w, p.x + w.off, p.y, sp, dt)) {
+    const offset = w.src.type === 'pizza' ? w.off : Math.abs(w.off);
+    if (moveStaff(w, p.x + offset, p.y, sp, dt)) {
       w.dir = w.src.type === 'pizza' ? -Math.PI / 2 : Math.PI;
       if (w.src.stock > 0 && w.actT <= 0) { w.src.stock--; w.items.push(w.src.type); w.actT = 0.18; }
     }
   } else {
     const d = w.dest === 'drive' ? DRIVE_DROP : DROP;
-    if (moveTo(w, d.x + w.off, d.y, sp, dt) && w.actT <= 0) {
+    if (moveStaff(w, d.x + w.off, d.y, sp, dt) && w.actT <= 0) {
       const i = dropIndex(w.items, w.dest);
       if (i >= 0) { putItem(w.items.splice(i, 1)[0], w.dest); w.actT = 0.1; }
       else {
@@ -770,7 +847,7 @@ function updateCarrier(w, sp, dt, sources) {
 
 // Banks every cash pile every few seconds.
 function updateManager(w, sp, dt) {
-  if (!moveTo(w, MANAGER_POST.x, MANAGER_POST.y, sp, dt)) return;
+  if (!moveStaff(w, MANAGER_POST.x, MANAGER_POST.y, sp, dt)) return;
   w.dir = Math.PI / 2;
   if (w.actT > 0) return;
   w.actT = 3;
@@ -785,10 +862,11 @@ function updateManager(w, sp, dt) {
 
 function updateCleaner(w, sp, dt) {
   if (!w.table || !canCleanTable(w.table)) w.table = tables.find(canCleanTable) || null;
-  if (!w.table) { const p = WORKER_POST_IDLE.cleaner; moveTo(w, p.x, p.y, sp, dt); return; }
+  if (!w.table) { const p = WORKER_POST_IDLE.cleaner; moveStaff(w, p.x, p.y, sp, dt); return; }
   const t = w.table;
-  if (moveTo(w, t.x, t.y + 45, sp, dt)) {
-    w.dir = -Math.PI / 2;
+  const side = t.aisle < t.x ? -1 : 1;
+  if (moveStaff(w, t.x + side * 60, t.y, sp, dt)) {
+    w.dir = side < 0 ? 0 : Math.PI;
     t.clean += dt;
     if (t.clean >= 1) { cleanTable(t, false); w.table = null; }
   }
@@ -1268,6 +1346,10 @@ rectPlane(DOOR_X - 75, 778, DOOR_X + 75, 1400, M('#d8cbb4'), 0.002);
 const brickMat = lam(TEX.brick);
 TEX.brick.repeat.set(14, 1.6);
 const wallMat = M('#e7835f'), trimMat = M('#fff1dc');
+for (const r of KITCHEN_WALLS) {
+  wall(r.x, r.y, r.x + r.w, r.y + r.h, 1.35, wallMat);
+  wall(r.x - 1, r.y - 1, r.x + r.w + 1, r.y + r.h + 1, 0.08, trimMat).position.y = 1.39;
+}
 // back wall
 wall(82, 26, 1198, 40, 2.6, brickMat);
 wall(82, 22, 1198, 44, 0.16, trimMat).position.y = 2.66;

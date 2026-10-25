@@ -540,3 +540,80 @@ test('staff and player cleaning wait until all reserved or seated diners leave',
     assert.equal(run('L.goal.progress'), 1, 'a clean table cannot pay or count twice');
   }
 });
+
+test('the cleaner walks around tables and chairs and cleans from the side', () => {
+  const run = game();
+  run(`for (const d of UNLOCKS) L.unlocked[d.id] = true; syncWorld();
+    const w = workers.find(w => w.type === 'cleaner'), t = tables[0];
+    w.x = WORKER_POST_IDLE.cleaner.x; w.y = WORKER_POST_IDLE.cleaner.y;
+    t.dirty = true; t.seats[0].dirty = true; t.seats[0].tip = 12;
+    let crossed = false;
+    for (let i = 0; i < 60 * 30 && t.dirty; i++) {
+      const before = P(w.x, w.y); updateCleaner(w, 120, 1 / 60);
+      if (!staffSegmentClear(before, w, staffMap().rects)) crossed = true;
+    }
+  `);
+  assert.equal(run('crossed'), false);
+  assert.equal(run('t.dirty'), false);
+  assert.equal(run('w.x'), run('t.x - 60'));
+  assert.equal(run('w.y'), run('t.y'));
+  assert.equal(run('L.piles.main'), 12);
+});
+
+test('every staff destination has a clear route through the kitchen passages', () => {
+  const run = game();
+  run(`for (const d of UNLOCKS) L.unlocked[d.id] = true; syncWorld();
+    const targets = [CASHIER, SALES_CASHIER, DRIVE_CASHIER, MANAGER_POST, WORKER_POST_IDLE.cleaner];
+    for (const off of [0, 24, -24, -20, 46]) {
+      targets.push(P(DROP.x + off, DROP.y), P(DRIVE_DROP.x + off, DRIVE_DROP.y));
+      for (const o of ovens) targets.push(P(o.pick.x + off, o.pick.y));
+    }
+    for (const o of stations) for (const off of [20, 46]) targets.push(P(o.pick.x + off, o.pick.y));
+    for (const t of tables) targets.push(P(t.x + (t.aisle < t.x ? -60 : 60), t.y));
+    const start = P(DOOR_X, 760);
+    const bad = targets.filter(target => {
+      const path = staffPath(start, target); if (!path) return true;
+      let prev = start;
+      for (const p of path) { if (!staffSegmentClear(prev, p, staffMap().rects)) return true; prev = p; }
+      return false;
+    });
+  `);
+  assert.equal(run('JSON.stringify(bad)'), '[]');
+});
+
+test('staff paths are recalculated when a new table blocks their route', () => {
+  const run = game();
+  run(`const w = makeWorker('cleaner'); w.x = 980; w.y = 500;
+    moveStaff(w, 980, 80, 120, 1 / 60); const oldKey = w.nav.key;
+    L.unlocked.table1 = true; syncWorld();
+    let crossed = false;
+    for (let i = 0; i < 60 * 15; i++) {
+      const before = P(w.x, w.y); moveStaff(w, 980, 80, 120, 1 / 60);
+      if (!staffSegmentClear(before, w, staffMap().rects)) crossed = true;
+    }
+  `);
+  assert.equal(run('crossed'), false);
+  assert.notEqual(run('w.nav.key'), run('oldKey'));
+  assert.equal(run('w.x'), 980);
+  assert.equal(run('w.y'), 80);
+});
+
+test('the kitchen divider blocks the player but its side passage stays open', () => {
+  const run = game();
+  run(`player.x = 330; player.y = 400; keys.KeyW = true;
+    for (let i = 0; i < 120; i++) updatePlayer(1 / 60);
+  `);
+  assert.ok(run('player.y') >= 370);
+  run(`keys.KeyW = false; keys.KeyA = true; player.x = 330; player.y = 480;
+    for (let i = 0; i < 30; i++) updatePlayer(1 / 60);
+  `);
+  assert.ok(run('player.x') < 286);
+});
+
+test('staff stop instead of walking through an unreachable target', () => {
+  const run = game();
+  run(diningRoom + `const w = makeWorker('cleaner'); w.x = 880; w.y = 398;`);
+  assert.equal(run('moveStaff(w, tables[0].x, tables[0].y, 120, 1)'), false);
+  assert.equal(run('w.x'), 880);
+  assert.equal(run('w.y'), 398);
+});
