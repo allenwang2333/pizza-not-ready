@@ -120,7 +120,7 @@
     <button id="upBtn">⬆️<span class="btxt"> Upgrades</span><kbd>U</kbd></button>
   </div>
 </div>
-<div id="help">WASD / arrows / hold mouse to move · scroll to zoom · walk onto ovens, mats, cash and $ zones · E upgrade nearby · L shops</div>
+<div id="help">WASD / arrows / hold mouse to move · scroll to zoom · walk onto ovens, mats, cash and $ zones · E upgrade nearby · trash bin drops items · L shops</div>
 <div id="panel" class="modal" hidden>
   <div class="card">
     <h2>Upgrades</h2>
@@ -176,7 +176,7 @@ function fmtDur(s) {
 // ================= layout (game logic uses a 1200x800 top-down plane) =================
 const ROOM = { x: 90, y: 40, w: 1100, h: 730 };
 const COUNTER = { x: 540, y: 305, w: 260, h: 48 };
-const DROP = P(600, 268), CASHIER = P(740, 268);
+const DROP = P(600, 268), CASHIER = P(740, 268), TRASH = P(495, 330);
 const DRIVE_COUNTER = { x: 92, y: 480, w: 46, h: 170 };
 const DRIVE_DROP = P(172, 512), DRIVE_CASHIER = P(172, 618);
 const QUEUE_X = 740, QUEUE_Y = 398, QUEUE_GAP = 44, MAX_QUEUE = 8;
@@ -194,6 +194,8 @@ const TABLE_POS = {
   table9: { x: 420, y: 650, aisle: MID_AISLE_X }, table10: { x: 560, y: 650, aisle: MID_AISLE_X },
 };
 const CARRIERS = ['carrier1', 'carrier2', 'carrier3'];
+// Seat offsets from the table center: two chairs south, two north.
+const SEATS = [{ dx: -22, dy: 45 }, { dx: 22, dy: 45 }, { dx: -22, dy: -45 }, { dx: 22, dy: -45 }];
 const ITEMS = {
   pizza: { icon: '🍕', base: 5 },
   soda:  { icon: '🥤', base: 3 },
@@ -203,10 +205,13 @@ const ITEM_TYPES = Object.keys(ITEMS);
 // Counter stock per item. Pizza keeps the old save key "counter".
 const STOCK_KEY = { pizza: 'counter', soda: 'soda', cream: 'cream' };
 const COUNTER_CAP = { pizza: COUNTER_MAX, soda: 12, cream: 12 };
+// Drive-thru counter stock per item. Pizza keeps the old save key "drive".
+const DRIVE_KEY = { pizza: 'drive', soda: 'dsoda', cream: 'dcream' };
+const DRIVE_CAP = { pizza: DRIVE_MAX, soda: 10, cream: 10 };
 // Drink and dessert stations along the left kitchen wall; w/h is the blocked floor area.
 const STATIONS = {
-  soda:  { x: 125, y: 410, w: 66, h: 60, pick: P(185, 410), bake: 1.8, max: 8 },
-  cream: { x: 121, y: 260, w: 58, h: 70, pick: P(185, 260), bake: 2.6, max: 6 },
+  soda:  { x: 125, y: 410, w: 66, h: 60, pick: P(185, 410), bake: 1.3, max: 8 },
+  cream: { x: 121, y: 260, w: 58, h: 70, pick: P(185, 260), bake: 2.0, max: 6 },
 };
 const PATIENCE = 60, VIP_PATIENCE = 80;
 const MANAGER_POST = P(870, 222);
@@ -303,7 +308,7 @@ const SAVE_KEY = 'pizza-ready-noads-v1';
 const newShop = () => ({
   unlocked: { oven1: true }, paid: {},
   up: { speed: 0, cap: 0, oven: 0, price: 0, cust: 0, staff: 0 },
-  counter: 0, drive: 0, soda: 0, cream: 0, piles: { main: 0, drive: 0 },
+  counter: 0, drive: 0, soda: 0, cream: 0, dsoda: 0, dcream: 0, piles: { main: 0, drive: 0 },
   rating: 3, goal: null, goalsDone: 0, lv: {},
 });
 function freshState() {
@@ -315,6 +320,7 @@ function fixShop(d) {
   Object.assign(sh.up, d.up); Object.assign(sh.piles, d.piles);
   sh.up.price = Math.min(sh.up.price, UPGRADES.find(u => u.id === 'price').max);
   sh.counter = d.counter | 0; sh.drive = d.drive | 0; sh.soda = d.soda | 0; sh.cream = d.cream | 0;
+  sh.dsoda = d.dsoda | 0; sh.dcream = d.dcream | 0;
   sh.rating = clamp(d.rating ?? 3, 1, 5); sh.goal = d.goal || null; sh.goalsDone = d.goalsDone | 0; sh.lv = { ...d.lv };
   return sh;
 }
@@ -387,7 +393,7 @@ function syncWorld() {
     if (L.unlocked[id] && !stations.some(o => o.id === id)) stations.push({ id, type: id, ...STATIONS[id], stock: 0, timer: 0 });
   for (const id in TABLE_POS)
     if (L.unlocked[id] && !tables.some(t => t.id === id))
-      tables.push({ id, ...TABLE_POS[id], occupant: null, dirty: false, tip: 0, clean: 0 });
+      tables.push({ id, ...TABLE_POS[id], seats: SEATS.map(() => ({ occupant: null, dirty: false, tip: 0 })), dirty: false, clean: 0 });
   for (const id of ['cashier', ...CARRIERS, 'cleaner', 'driver', 'barista', 'manager'])
     if (L.unlocked[id] && !workers.some(w => w.key === id)) workers.push(makeWorker(id));
 }
@@ -409,8 +415,10 @@ const equipCost = id => Math.round(EQUIP[equipKind(id)].base * Math.pow(2.5, lvO
 // Work time multiplier: Lv 5 takes 40% of the Lv 1 time.
 const speedUp = id => 1 - 0.15 * (lvOf(id) - 1);
 const counterCap = t => COUNTER_CAP[t] + (t === 'pizza' ? 20 : 4) * (lvOf('counter') - 1);
-const driveCap = () => DRIVE_MAX + 15 * (lvOf('drive') - 1);
+const driveCap = t => DRIVE_CAP[t] + (t === 'pizza' ? 15 : 3) * (lvOf('drive') - 1);
 const tableScore = (sh, ids) => ids.reduce((a, id) => a + lvOf(id, sh), 0);
+// Lv 1 seats 2, Lv 2 seats 3, Lv 3 and up seat 4.
+const seatCount = t => Math.min(4, 1 + lvOf(t.id));
 const equipBorn = {};
 // Upgradable things in this shop; r is the floor area used to check whether the player is next to it.
 function equipment() {
@@ -447,8 +455,15 @@ const stockMax = o => (STATIONS[o.type]?.max ?? 6) + L.up.oven + 2 * (lvOf(o.id)
 const itemPrice = t => ITEMS[t].base * (1 + 1.2 * L.up.price) * loc().priceMult * starMult();
 const price = () => itemPrice('pizza');
 const stockOf = t => L[STOCK_KEY[t]];
-const roomFor = (t, where) => where === 'drive' ? (t === 'pizza' ? driveCap() - L.drive : 0) : counterCap(t) - stockOf(t);
-function putItem(t, where) { if (where === 'drive') L.drive++; else L[STOCK_KEY[t]]++; }
+const driveStock = t => L[DRIVE_KEY[t]];
+const roomFor = (t, where) => where === 'drive' ? driveCap(t) - driveStock(t) : counterCap(t) - stockOf(t);
+function putItem(t, where) { L[(where === 'drive' ? DRIVE_KEY : STOCK_KEY)[t]]++; }
+// Sends carried items to whichever counter is emptier for them.
+function chooseDest(items) {
+  if (!L.unlocked.drive) return 'counter';
+  const fill = where => items.reduce((a, t) => a + (where === 'drive' ? driveStock(t) / driveCap(t) : stockOf(t) / counterCap(t)), 0);
+  return fill('drive') < fill('counter') ? 'drive' : 'counter';
+}
 // Index of the top-most carried item that fits at this drop point, or -1.
 function dropIndex(items, where) {
   for (let i = items.length - 1; i >= 0; i--) if (roomFor(items[i], where) > 0) return i;
@@ -609,6 +624,11 @@ function updatePlayer(dt) {
     const i = where ? dropIndex(player.items, where) : -1;
     if (i >= 0) { putItem(player.items.splice(i, 1)[0], where); player.actT = 0.07; sfx.pop(); }
   }
+  // Trash bin: throw away carried items that have nowhere to go.
+  // Only after standing on the mat for a moment, so walking past never throws pizzas away.
+  const onTrash = Math.abs(player.x - TRASH.x) < 30 && Math.abs(player.y - TRASH.y) < 20;
+  player.trashT = onTrash ? (player.trashT || 0) + dt : 0;
+  if (player.actT <= 0 && player.items.length && player.trashT > 0.4) { player.items.pop(); player.actT = 0.05; sfx.pop(); }
   // collect cash
   for (const k in PILES) {
     if (L.piles[k] > 0 && dist(player, PILES[k]) < 50) {
@@ -628,9 +648,11 @@ function updatePlayer(dt) {
 }
 
 function cleanTable(t, byPlayer) {
-  if (byPlayer) { earn(t.tip, t.x, t.y); sfx.cash(); }
-  else L.piles.main += t.tip;
-  t.dirty = false; t.clean = 0; t.tip = 0;
+  const tip = t.seats.reduce((a, s) => a + (s.dirty ? s.tip : 0), 0);
+  for (const s of t.seats) if (s.dirty) { s.dirty = false; s.tip = 0; }
+  if (byPlayer) { earn(tip, t.x, t.y); sfx.cash(); }
+  else L.piles.main += tip;
+  t.dirty = false; t.clean = 0;
   goalProgress('clean', 1);
 }
 
@@ -659,11 +681,12 @@ function updateWorkers(dt) {
 function updateCarrier(w, sp, dt, sources) {
   const cap = staffCap(L.up.staff);
   const ready = sources.filter(o => o.stock > 0);
-  const need = o => roomFor(o.type, 'counter') / counterCap(o.type);
+  const need = o => Math.max(roomFor(o.type, 'counter') / counterCap(o.type),
+    L.unlocked.drive ? roomFor(o.type, 'drive') / driveCap(o.type) : 0);
   if (w.state === 'fetch') {
     if (w.items.length >= cap || (w.items.length && !ready.length)) {
       w.state = 'deliver';
-      w.dest = w.type === 'carrier' && L.unlocked.drive && L.drive < L.counter ? 'drive' : 'counter';
+      w.dest = chooseDest(w.items);
       return;
     }
     if (!w.src || (w.src.stock === 0 && ready.length))
@@ -679,6 +702,11 @@ function updateCarrier(w, sp, dt, sources) {
     if (moveTo(w, d.x + w.off, d.y, sp, dt) && w.actT <= 0) {
       const i = dropIndex(w.items, w.dest);
       if (i >= 0) { putItem(w.items.splice(i, 1)[0], w.dest); w.actT = 0.1; }
+      else {
+        // Nothing fits here: take the load to the other counter if it has room.
+        const other = w.dest === 'drive' ? 'counter' : 'drive';
+        if ((other === 'counter' || L.unlocked.drive) && dropIndex(w.items, other) >= 0) w.dest = other;
+      }
       if (!w.items.length) { w.state = 'fetch'; w.src = null; }
     }
   }
@@ -739,11 +767,16 @@ function finishOrder(c) {
   goalProgress('serve', 1);
   c.items = ITEM_TYPES.flatMap(t => Array(c.order[t]).fill(t));
   c.state = 'walk';
-  const t = c.dine ? tables.find(t => !t.occupant && !t.dirty) : null;
+  let t = null, si = -1;
+  if (c.dine) for (const tb of tables) {
+    si = tb.seats.findIndex((s, i) => i < seatCount(tb) && !s.occupant && !s.dirty);
+    if (si >= 0) { t = tb; break; }
+  }
   if (t) {
-    t.occupant = c; c.table = t; c.next = 'eat';
-    // Walk in the row below the chairs so customers do not cross other tables.
-    c.path = [P(t.aisle, QUEUE_Y), P(t.aisle, t.y + 80), P(t.x, t.y + 80), P(t.x, t.y + 45)];
+    const st = SEATS[si], row = t.y + (st.dy > 0 ? 80 : -80);
+    t.seats[si].occupant = c; c.table = t; c.seat = si; c.next = 'eat';
+    // Walk along the row just outside the chairs so customers do not cross other tables.
+    c.path = [P(t.aisle, QUEUE_Y), P(t.aisle, row), P(t.x + st.dx, row), P(t.x + st.dx, t.y + st.dy)];
   } else {
     c.next = 'gone';
     c.path = [P(LEAVE_X, QUEUE_Y + 10), P(LEAVE_X, 860)];
@@ -790,16 +823,16 @@ function updateCustomers(dt) {
     if (c.state === 'eat') {
       c.timer -= dt;
       if (c.timer <= 0) {
-        const t = c.table;
-        t.occupant = null; t.dirty = true;
-        t.tip = Math.round(price() * orderSize(c.order) * 0.5 * (c.vip ? 3 : 1) * (1 + 0.5 * (lvOf(t.id) - 1))) + 2;
+        const t = c.table, st = SEATS[c.seat], seat = t.seats[c.seat], row = t.y + (st.dy > 0 ? 80 : -80);
+        seat.occupant = null; seat.dirty = true; t.dirty = true;
+        seat.tip = Math.round(price() * orderSize(c.order) * 0.5 * (c.vip ? 3 : 1) * (1 + 0.5 * (lvOf(t.id) - 1))) + 2;
         c.table = null; c.state = 'walk'; c.next = 'gone';
-        c.path = [P(t.x, t.y + 80), P(t.aisle, t.y + 80), P(t.aisle, 740), P(LEAVE_X, 760), P(LEAVE_X, 860)];
+        c.path = [P(t.x + st.dx, row), P(t.aisle, row), P(t.aisle, 740), P(LEAVE_X, 760), P(LEAVE_X, 860)];
       }
       continue;
     }
     if (c.path.length) { const p = c.path[0]; if (moveTo(c, p.x, p.y, 110, dt)) c.path.shift(); }
-    else if (c.next === 'eat') { c.state = 'eat'; c.timer = rand(6, 10) * (1 - 0.12 * (lvOf(c.table.id) - 1)); c.eatTotal = c.timer; c.items = []; c.dir = -Math.PI / 2; c.moving = false; }
+    else if (c.next === 'eat') { c.state = 'eat'; c.timer = rand(6, 10) * (1 - 0.12 * (lvOf(c.table.id) - 1)); c.eatTotal = c.timer; c.items = []; c.dir = SEATS[c.seat].dy > 0 ? -Math.PI / 2 : Math.PI / 2; c.moving = false; }
     else walkers.splice(i, 1);
   }
 }
@@ -846,22 +879,35 @@ function goalProgress(type, amt) {
   newGoal();
 }
 
+function makeCarOrder() {
+  const o = { pizza: randi(3, 6), soda: 0, cream: 0 };
+  // Only once a barista can keep the drive-thru stocked; one car waiting on a drink blocks the lane.
+  if (!L.unlocked.barista) return o;
+  if (L.unlocked.soda && Math.random() < 0.6) o.soda = randi(1, 3);
+  if (L.unlocked.cream && Math.random() < 0.45) o.cream = randi(1, 2);
+  return o;
+}
+
 function updateCars(dt) {
   if (L.unlocked.drive) {
     carT -= dt;
     if (carT <= 0) {
       carT = carTime() * rand(0.8, 1.2);
-      if (carQueue.length < 3) carQueue.push({ id: nextId++, x: CAR_X, y: 900, order: randi(3, 6), got: 0, color: pick(CAR_COLORS) });
+      if (carQueue.length < 3) carQueue.push({ id: nextId++, x: CAR_X, y: 900, order: makeCarOrder(),
+        got: { pizza: 0, soda: 0, cream: 0 }, color: pick(CAR_COLORS) });
     }
   }
   carQueue.forEach((c, i) => moveTo(c, CAR_X, CAR_Y + i * CAR_GAP, 170, dt));
   const f = carQueue[0];
   if (f && f.y === CAR_Y && drivePresent()) {
     driveServeT -= dt;
-    if (driveServeT <= 0 && f.got < f.order && L.drive > 0) { L.drive--; f.got++; driveServeT = 0.2 * speedUp('drive'); }
-    if (f.got >= f.order) {
+    if (driveServeT <= 0) {
+      const t = ITEM_TYPES.find(t => f.got[t] < f.order[t] && driveStock(t) > 0);
+      if (t) { L[DRIVE_KEY[t]]--; f.got[t]++; driveServeT = 0.2 * speedUp('drive'); }
+    }
+    if (!orderLeft(f)) {
       carQueue.shift(); driveServeT = 0.4;
-      const pay = Math.round(f.order * price() * 1.5 * (1 + 0.1 * (lvOf('drive') - 1)));
+      const pay = Math.round(ITEM_TYPES.reduce((a, t) => a + f.order[t] * itemPrice(t), 0) * 1.5 * (1 + 0.1 * (lvOf('drive') - 1)));
       L.piles.drive += pay;
       addFloat(CAR_X, CAR_Y, '$' + fmt(pay), 'gold');
       goalProgress('drive', 1);
@@ -1390,31 +1436,37 @@ function makeTableObj() {
   const cloth = new THREE.MeshStandardMaterial({ map: TEX.cloth, roughness: 0.9 }), chairMat = ownMat('#c98a4b');
   add(root, gBox(2.05, 0.1, 1.3, 0.04), [cloth, M('#e8473b')], 0, 0.82, 0);
   for (const [lx, lz] of [[-0.85, -0.5], [0.85, -0.5], [-0.85, 0.5], [0.85, 0.5]]) add(root, gCyl(0.05, 0.05, 0.8, 8), '#6d4428', lx, 0.4, lz);
-  const chair = new THREE.Group(); chair.position.z = 1.15; root.add(chair);
-  add(chair, gBox(0.72, 0.1, 0.66, 0.04), chairMat, 0, 0.48, 0);
-  add(chair, gBox(0.72, 0.42, 0.08, 0.03), chairMat, 0, 0.72, 0.31);
-  // Lv 2: flower vase, Lv 3: candle, Lv 4: linen cloth, Lv 5: gold chair.
-  const vase = new THREE.Group(); vase.position.set(-0.62, 0.87, -0.3); root.add(vase);
+  const crust = M('#e2a75e'), pizzaTop = new THREE.MeshStandardMaterial({ map: TEX.pizza, roughness: 0.8 });
+  const coin = M('#f5c242', { metalness: 0.5, roughness: 0.35 });
+  // Per seat: a chair, a plate with a 4-slice pizza, and dirty dishes.
+  const seats = SEATS.map(st => {
+    const sx = st.dx * U, south = st.dy > 0, pz = south ? 0.3 : -0.3;
+    const chair = new THREE.Group(); chair.position.set(sx, 0, st.dy * U); root.add(chair);
+    if (!south) chair.rotation.y = Math.PI;
+    add(chair, gBox(0.62, 0.1, 0.6, 0.04), chairMat, 0, 0.48, 0);
+    add(chair, gBox(0.62, 0.4, 0.08, 0.03), chairMat, 0, 0.71, 0.28);
+    for (const [lx, lz] of [[-0.25, -0.24], [0.25, -0.24], [-0.25, 0.24], [0.25, 0.24]]) add(chair, gCyl(0.035, 0.035, 0.45, 6), '#6d4428', lx, 0.22, lz);
+    const plate = add(root, gCyl(0.26, 0.22, 0.03, 20), '#ffffff', sx, 0.885, pz);
+    const slices = [];
+    for (let i = 0; i < 4; i++) {
+      const geo = G('qslice' + i, () => new THREE.CylinderGeometry(0.2, 0.2, 0.04, 4, 1, false, i * Math.PI / 2, Math.PI / 2));
+      slices.push(add(root, geo, [crust, pizzaTop, crust], sx, 0.92, pz, false));
+    }
+    const dirty = new THREE.Group(); root.add(dirty);
+    for (let i = 0; i < 4; i++) add(dirty, gSph(0.035, 6, 4), '#b07a3a', sx + Math.sin(i * 2.3) * 0.12, 0.915, pz + Math.cos(i * 1.7) * 0.1, false);
+    add(dirty, gCyl(0.08, 0.08, 0.03, 12), coin, sx + (sx > 0 ? 0.3 : -0.3), 0.885, pz);
+    return { chair, plate, slices, dirty };
+  });
+  // Lv 2: flower vase, Lv 3: candle, Lv 4: linen cloth, Lv 5: gold chairs.
+  const vase = new THREE.Group(); vase.position.set(-0.14, 0.87, 0); root.add(vase);
   add(vase, gCyl(0.07, 0.09, 0.22, 12), '#4a9df8', 0, 0.11, 0);
   add(vase, gCyl(0.012, 0.012, 0.2, 5), '#3f9e5a', 0, 0.3, 0, false);
   add(vase, gSph(0.09, 10, 8), '#ff7eb6', 0, 0.42, 0);
-  const candle = new THREE.Group(); candle.position.set(0.62, 0.87, -0.3); root.add(candle);
+  const candle = new THREE.Group(); candle.position.set(0.16, 0.87, 0); root.add(candle);
   add(candle, gCyl(0.08, 0.08, 0.03, 12), M('#f5c242', { metalness: 0.6, roughness: 0.3 }), 0, 0.015, 0);
   add(candle, gCyl(0.045, 0.045, 0.2, 10), '#fff8ec', 0, 0.13, 0);
   add(candle, gSph(0.04, 8, 6), BASIC('#ffc94a'), 0, 0.27, 0, false);
-  for (const [lx, lz] of [[-0.3, -0.27], [0.3, -0.27], [-0.3, 0.27], [0.3, 0.27]]) add(chair, gCyl(0.035, 0.035, 0.45, 6), '#6d4428', lx, 0.22, lz);
-  const plate = add(root, gCyl(0.44, 0.38, 0.04, 24), '#ffffff', 0, 0.89, 0.2);
-  const pizzaTop = new THREE.MeshStandardMaterial({ map: TEX.pizza, roughness: 0.8 });
-  const slices = [];
-  for (let i = 0; i < 8; i++) {
-    const geo = G('slice' + i, () => new THREE.CylinderGeometry(0.36, 0.36, 0.05, 4, 1, false, i * Math.PI / 4, Math.PI / 4));
-    slices.push(add(root, geo, [M('#e2a75e'), pizzaTop, M('#e2a75e')], 0, 0.935, 0.2, false));
-  }
-  const dirty = new THREE.Group(); root.add(dirty);
-  for (let i = 0; i < 7; i++) add(dirty, gSph(0.045, 6, 4), '#b07a3a', Math.sin(i * 2.3) * 0.22, 0.92, 0.2 + Math.cos(i * 1.7) * 0.16, false);
-  add(dirty, gBox(0.3, 0.03, 0.3, 0.01), '#ffffff', -0.6, 0.885, 0.25).rotation.y = 0.4;
-  for (let i = 0; i < 3; i++) add(dirty, gCyl(0.1, 0.1, 0.035, 14), M('#f5c242', { metalness: 0.5, roughness: 0.35 }), 0.62 + i * 0.05, 0.89 + i * 0.035, 0.22 - i * 0.02);
-  return { root, plate, slices, dirty, cloth, chairMat, vase, candle };
+  return { root, seats, cloth, chairMat, vase, candle };
 }
 
 function makePersonObj(e) {
@@ -1527,6 +1579,14 @@ function makeMat(p, label, icon, color) {
 }
 makeMat(DROP, 'DROP', '📦', '#d9822b');
 makeMat(CASHIER, 'SERVE', '💁', '#2f7fd8');
+makeMat(TRASH, 'TRASH', '🗑️', '#7f8c8d');
+{
+  const bin = new THREE.Group(); bin.position.set(X(TRASH.x) - 1.15, 0, Z(TRASH.y) - 0.1);
+  add(bin, gCyl(0.3, 0.25, 0.7, 16), '#8a939c', 0, 0.35, 0);
+  add(bin, gCyl(0.33, 0.33, 0.07, 16), '#5e6670', 0, 0.73, 0);
+  add(bin, gBox(0.18, 0.06, 0.08, 0.02), '#5e6670', 0, 0.79, 0);
+  scene.add(bin);
+}
 const driveMats = [makeMat(DRIVE_DROP, 'DROP', '📦', '#d9822b'), makeMat(DRIVE_CASHIER, 'SERVE', '💁', '#2f7fd8')];
 const ovenMats = {}, stationMats = {};
 
@@ -1754,6 +1814,12 @@ function syncScene(dt) {
       const st = Math.floor(i / 10) % 6, h = i % 10 + 10 * Math.floor(i / 60);
       pushInst(boxIM, driveCounter.position.x + (st >= 3 ? 0.3 : -0.3), 1.06 + 0.065 + BOX_H * h, Z(DRIVE_COUNTER.y + 22) + (st % 3) * 0.72, Math.PI / 2);
     }
+    // Soda and dessert: 2 per layer, up to 4 layers; larger amounts show a count.
+    const dx = driveCounter.position.x, sz = Z(DRIVE_COUNTER.y + 22) + 2.0, cz2 = sz + 0.42;
+    for (let i = 0; i < Math.min(L.dsoda, 8); i++) pushItem('soda', dx + (i % 2 ? 0.3 : -0.3), 1.06 + Math.floor(i / 2) * 0.3, sz);
+    for (let i = 0; i < Math.min(L.dcream, 8); i++) pushItem('cream', dx + (i % 2 ? 0.3 : -0.3), 1.06 + Math.floor(i / 2) * 0.4, cz2);
+    if (L.dsoda > 8) label('dsoda', dx, 2.5, sz, `<span class="tag">🥤×${L.dsoda}</span>`);
+    if (L.dcream > 8) label('dcream', dx, 2.9, cz2, `<span class="tag">🍦×${L.dcream}</span>`);
   }
 
   // tables
@@ -1766,11 +1832,15 @@ function syncScene(dt) {
     });
     popScale(ob);
     ob.root.position.set(X(t.x), 0, Z(t.y));
-    const c = t.occupant, eating = c && c.state === 'eat';
-    const left = eating ? Math.ceil(8 * c.timer / c.eatTotal) : 0;
-    ob.slices.forEach((s, i) => { s.visible = i < left; });
-    ob.plate.visible = eating || t.dirty;
-    ob.dirty.visible = t.dirty;
+    const n = seatCount(t);
+    ob.seats.forEach((so, i) => {
+      const seat = t.seats[i], c = seat.occupant, eating = c && c.state === 'eat';
+      const left = eating ? Math.ceil(4 * c.timer / c.eatTotal) : 0;
+      so.chair.visible = i < n;
+      so.slices.forEach((m, j) => { m.visible = j < left; });
+      so.plate.visible = eating || seat.dirty;
+      so.dirty.visible = seat.dirty;
+    });
     if (t.dirty) label('tbl' + t.id, X(t.x), 1.9, Z(t.y),
       `<div style="text-align:center"><div class="icon">🧽</div>${t.clean > 0 ? `<div class="bar green"><i style="width:${Math.round(t.clean * 100)}%"></i></div>` : ''}</div>`);
   }
@@ -1826,7 +1896,7 @@ function syncScene(dt) {
   }
   for (const c of walkers) if (c.angry) label('mad' + c.id, X(c.x), 2.3, Z(c.y), '<div class="icon">😡</div>');
   const fc = carQueue[0];
-  if (fc && fc.y === CAR_Y) label('car' + fc.id, X(fc.x), 2.1, Z(fc.y), `<div class="bubble">🍕 ${fc.got}/${fc.order}</div>`);
+  if (fc && fc.y === CAR_Y) label('car' + fc.id, X(fc.x) + 0.6, 2.1, Z(fc.y), orderHtml(fc));
   if (f && f.y === QUEUE_Y && !cashierPresent() && L.counter > 0) label('alert', X(CASHIER.x), 1.4, Z(CASHIER.y), '<div class="alert">!</div>');
 
   const gt = guideTarget();
@@ -1864,10 +1934,13 @@ function syncScene(dt) {
 
 function orderHtml(c) {
   const parts = ITEM_TYPES.filter(t => c.order[t] > 0).map(t => `${ITEMS[t].icon} ${c.got[t]}/${c.order[t]}`);
-  const p = clamp(c.patience / (c.vip ? VIP_PATIENCE : PATIENCE), 0, 1);
-  const color = p > 0.5 ? '#38c979' : p > 0.25 ? '#f7a531' : '#ef5b5b';
-  return `<div class="bubble${c.vip ? ' vip' : ''}">${c.vip ? '👑 ' : ''}${parts.join(' &nbsp;')}` +
-    `<div class="pat"><i style="width:${Math.round(p * 100)}%;background:${color}"></i></div></div>`;
+  let bar = '';
+  if (c.patience !== undefined) {
+    const p = clamp(c.patience / (c.vip ? VIP_PATIENCE : PATIENCE), 0, 1);
+    const color = p > 0.5 ? '#38c979' : p > 0.25 ? '#f7a531' : '#ef5b5b';
+    bar = `<div class="pat"><i style="width:${Math.round(p * 100)}%;background:${color}"></i></div>`;
+  }
+  return `<div class="bubble${c.vip ? ' vip' : ''}">${c.vip ? '👑 ' : ''}${parts.join(' &nbsp;')}${bar}</div>`;
 }
 
 function guideTarget() {
