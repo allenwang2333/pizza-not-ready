@@ -39,6 +39,9 @@
   #money{display:flex;align-items:center;gap:8px;background:linear-gradient(#2fbf71,#1d9a57);
     padding:5px 18px 5px 6px;border-radius:24px;font-size:24px;font-weight:900;
     box-shadow:0 4px 0 #136b3b,0 6px 14px rgba(0,0,0,.25);text-shadow:0 2px 0 rgba(0,0,0,.25)}
+  #left{display:flex;flex-direction:column;align-items:flex-start;gap:6px}
+  #shopTag{background:rgba(40,25,10,.45);padding:3px 10px;border-radius:10px;font-size:12px;font-weight:800}
+  #shopTag:empty{display:none}
   #money .coin{width:30px;height:30px;border-radius:50%;background:radial-gradient(circle at 35% 35%,#fff3b0,#f7c531 55%,#d99a0b);
     color:#a26a00;font-size:18px;display:flex;align-items:center;justify-content:center;text-shadow:none;
     box-shadow:inset 0 -2px 0 rgba(0,0,0,.15)}
@@ -55,12 +58,12 @@
   #help{position:fixed;bottom:10px;left:50%;transform:translateX(-50%);font-size:12px;font-weight:700;
     background:rgba(40,25,10,.45);padding:5px 12px;border-radius:12px;pointer-events:none;white-space:nowrap}
 
-  #panel{position:fixed;inset:0;background:rgba(30,18,8,.45);display:flex;align-items:center;justify-content:center;
+  .modal{position:fixed;inset:0;background:rgba(30,18,8,.45);display:flex;align-items:center;justify-content:center;
     backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px)}
-  #panel[hidden]{display:none}
-  #card{background:#fff8ec;color:#4a3112;border-radius:22px;padding:18px 18px 14px;width:min(540px,92vw);
+  .modal[hidden]{display:none}
+  .card{background:#fff8ec;color:#4a3112;border-radius:22px;padding:18px 18px 14px;width:min(540px,92vw);
     max-height:86vh;overflow:auto;box-shadow:0 8px 0 #d9c3a0,0 20px 50px rgba(0,0,0,.35)}
-  #card h2{margin:0 0 12px;font-size:24px;font-weight:900;text-align:center;color:#e0592f}
+  .card h2{margin:0 0 12px;font-size:24px;font-weight:900;text-align:center;color:#e0592f}
   .row{display:flex;align-items:center;gap:12px;padding:10px;margin-bottom:8px;background:#fff;border-radius:16px;
     box-shadow:0 3px 0 #ecdcc2}
   .row .ic{font-size:28px;width:46px;height:46px;border-radius:14px;background:#ffefd2;display:flex;
@@ -72,7 +75,7 @@
   .pips i{width:10px;height:6px;border-radius:3px;background:#ecdcc2}
   .pips i.on{background:#f7a531}
   .row button{min-width:96px}
-  #cardFoot{display:flex;justify-content:space-between;margin-top:10px}
+  .foot{display:flex;justify-content:space-between;margin-top:10px}
   #resetBtn{background:linear-gradient(#e9e2d6,#d6ccbc);color:#7a6a55;box-shadow:0 4px 0 #a99c88;font-size:12px}
   #toast{position:fixed;top:66px;left:50%;transform:translateX(-50%) translateY(-10px);background:#fff8ec;color:#4a3112;
     padding:10px 18px;border-radius:16px;font-weight:800;font-size:15px;opacity:0;transition:.3s;pointer-events:none;
@@ -83,22 +86,33 @@
 <body>
 <div id="labels"></div>
 <div id="hud">
-  <div id="money"><span class="coin">$</span><span id="moneyVal">0</span></div>
+  <div id="left">
+    <div id="money"><span class="coin">$</span><span id="moneyVal">0</span></div>
+    <div id="shopTag"></div>
+  </div>
   <div id="right">
     <button id="zoomBtn" title="Zoom (scroll wheel, - / =)">🔍</button>
     <button id="soundBtn" title="Sound (M)">🔊</button>
+    <button id="shopsBtn">🗺️ Shops<kbd>L</kbd></button>
     <button id="upBtn">⬆️ Upgrades<kbd>U</kbd></button>
   </div>
 </div>
-<div id="help">WASD / arrows / hold mouse to move · scroll to zoom · walk onto ovens, mats, cash and $ zones</div>
-<div id="panel" hidden>
-  <div id="card">
+<div id="help">WASD / arrows / hold mouse to move · scroll to zoom · walk onto ovens, mats, cash and $ zones · L shops</div>
+<div id="panel" class="modal" hidden>
+  <div class="card">
     <h2>Upgrades</h2>
     <div id="upList"></div>
-    <div id="cardFoot">
+    <div class="foot">
       <button id="resetBtn">Reset progress</button>
       <button id="closeBtn">Close<kbd>Esc</kbd></button>
     </div>
+  </div>
+</div>
+<div id="shops" class="modal" hidden>
+  <div class="card">
+    <h2>Your Shops</h2>
+    <div id="shopList"></div>
+    <div class="foot"><span></span><button id="shopsClose">Close<kbd>Esc</kbd></button></div>
   </div>
 </div>
 <div id="toast"></div>
@@ -143,33 +157,72 @@ const DROP = P(600, 268), CASHIER = P(740, 268);
 const DRIVE_COUNTER = { x: 92, y: 480, w: 46, h: 170 };
 const DRIVE_DROP = P(172, 512), DRIVE_CASHIER = P(172, 618);
 const QUEUE_X = 740, QUEUE_Y = 398, QUEUE_GAP = 44, MAX_QUEUE = 8;
-const LEAVE_X = 805, AISLE_X = 880, DOOR_X = 780, SPAWN = P(740, 850);
+const LEAVE_X = 805, AISLE_X = 880, MID_AISLE_X = 660, DOOR_X = 780, SPAWN = P(740, 850);
 const CAR_X = 42, CAR_Y = 590, CAR_GAP = 100;
 const PILES = { main: P(850, 272), drive: P(230, 730) };
 const COUNTER_MAX = 40, DRIVE_MAX = 30;
-const OVEN_POS = { oven1: P(170, 95), oven2: P(300, 95), oven3: P(430, 95), oven4: P(560, 95) };
+const OVEN_POS = { oven1: P(170, 95), oven2: P(300, 95), oven3: P(430, 95), oven4: P(560, 95), oven5: P(690, 95) };
+// aisle: the x where customers walk up and down to reach the table.
 const TABLE_POS = {
-  table1: P(980, 170), table2: P(1110, 170), table3: P(980, 370),
-  table4: P(1110, 370), table5: P(980, 570), table6: P(1110, 570),
+  table1: { x: 980, y: 170, aisle: AISLE_X }, table2: { x: 1110, y: 170, aisle: AISLE_X },
+  table3: { x: 980, y: 370, aisle: AISLE_X }, table4: { x: 1110, y: 370, aisle: AISLE_X },
+  table5: { x: 980, y: 570, aisle: AISLE_X }, table6: { x: 1110, y: 570, aisle: AISLE_X },
+  table7: { x: 420, y: 480, aisle: MID_AISLE_X }, table8: { x: 560, y: 480, aisle: MID_AISLE_X },
+  table9: { x: 420, y: 650, aisle: MID_AISLE_X }, table10: { x: 560, y: 650, aisle: MID_AISLE_X },
 };
+const CARRIERS = ['carrier1', 'carrier2', 'carrier3'];
 const WORKER_POST_IDLE = { cleaner: P(1045, 720) };
 
+// Base costs; each location multiplies them by its costMult.
 const UNLOCKS = [
-  { id: 'table1',   cost: 20,   req: null,       x: 980,  y: 170, icon: '🪑', name: 'Table' },
-  { id: 'oven2',    cost: 50,   req: 'table1',   x: 300,  y: 95,  icon: '🔥', name: 'Oven' },
-  { id: 'cashier',  cost: 100,  req: 'oven2',    x: 740,  y: 185, icon: '💁', name: 'Cashier' },
-  { id: 'table2',   cost: 120,  req: 'cashier',  x: 1110, y: 170, icon: '🪑', name: 'Table' },
-  { id: 'carrier1', cost: 200,  req: 'cashier',  x: 470,  y: 260, icon: '🧑‍🍳', name: 'Baker' },
-  { id: 'table3',   cost: 260,  req: 'table2',   x: 980,  y: 370, icon: '🪑', name: 'Table' },
-  { id: 'oven3',    cost: 350,  req: 'carrier1', x: 430,  y: 95,  icon: '🔥', name: 'Oven' },
-  { id: 'cleaner',  cost: 500,  req: 'table3',   x: 1045, y: 700, icon: '🧹', name: 'Cleaner' },
-  { id: 'table4',   cost: 600,  req: 'table3',   x: 1110, y: 370, icon: '🪑', name: 'Table' },
-  { id: 'drive',    cost: 900,  req: 'oven3',    x: 175,  y: 565, icon: '🚗', name: 'Drive-Thru' },
-  { id: 'driver',   cost: 1200, req: 'drive',    x: 260,  y: 640, icon: '🎧', name: 'Drive Clerk' },
-  { id: 'table5',   cost: 1400, req: 'table4',   x: 980,  y: 570, icon: '🪑', name: 'Table' },
-  { id: 'carrier2', cost: 1600, req: 'drive',    x: 380,  y: 260, icon: '🧑‍🍳', name: 'Baker' },
-  { id: 'table6',   cost: 2000, req: 'table5',   x: 1110, y: 570, icon: '🪑', name: 'Table' },
-  { id: 'oven4',    cost: 2500, req: 'carrier2', x: 560,  y: 95,  icon: '🔥', name: 'Oven' },
+  { id: 'table1',   cost: 20,    req: null,       x: 980,  y: 170, icon: '🪑', name: 'Table' },
+  { id: 'oven2',    cost: 50,    req: 'table1',   x: 300,  y: 95,  icon: '🔥', name: 'Oven' },
+  { id: 'cashier',  cost: 100,   req: 'oven2',    x: 740,  y: 185, icon: '💁', name: 'Cashier' },
+  { id: 'table2',   cost: 160,   req: 'cashier',  x: 1110, y: 170, icon: '🪑', name: 'Table' },
+  { id: 'carrier1', cost: 250,   req: 'cashier',  x: 470,  y: 260, icon: '🧑‍🍳', name: 'Baker' },
+  { id: 'table3',   cost: 380,   req: 'table2',   x: 980,  y: 370, icon: '🪑', name: 'Table' },
+  { id: 'oven3',    cost: 560,   req: 'carrier1', x: 430,  y: 95,  icon: '🔥', name: 'Oven' },
+  { id: 'cleaner',  cost: 800,   req: 'table3',   x: 1045, y: 700, icon: '🧹', name: 'Cleaner' },
+  { id: 'table4',   cost: 1150,  req: 'table3',   x: 1110, y: 370, icon: '🪑', name: 'Table' },
+  { id: 'drive',    cost: 1600,  req: 'oven3',    x: 175,  y: 565, icon: '🚗', name: 'Drive-Thru' },
+  { id: 'driver',   cost: 2300,  req: 'drive',    x: 260,  y: 640, icon: '🎧', name: 'Drive Clerk' },
+  { id: 'table5',   cost: 3200,  req: 'table4',   x: 980,  y: 570, icon: '🪑', name: 'Table' },
+  { id: 'carrier2', cost: 4400,  req: 'drive',    x: 380,  y: 260, icon: '🧑‍🍳', name: 'Baker' },
+  { id: 'table6',   cost: 6000,  req: 'table5',   x: 1110, y: 570, icon: '🪑', name: 'Table' },
+  { id: 'oven4',    cost: 8000,  req: 'carrier2', x: 560,  y: 95,  icon: '🔥', name: 'Oven' },
+  { id: 'table7',   cost: 10500, req: 'oven4',    x: 420,  y: 480, icon: '🪑', name: 'Table' },
+  { id: 'table8',   cost: 13500, req: 'table7',   x: 560,  y: 480, icon: '🪑', name: 'Table' },
+  { id: 'oven5',    cost: 17000, req: 'table7',   x: 690,  y: 95,  icon: '🔥', name: 'Oven' },
+  { id: 'carrier3', cost: 21000, req: 'oven5',    x: 290,  y: 260, icon: '🧑‍🍳', name: 'Baker' },
+  { id: 'table9',   cost: 26000, req: 'table8',   x: 420,  y: 650, icon: '🪑', name: 'Table' },
+  { id: 'table10',  cost: 32000, req: 'table9',   x: 560,  y: 650, icon: '🪑', name: 'Table' },
+];
+// Appears in the newest shop after everything there is unlocked.
+const NEW_SHOP = { id: 'newshop', x: 650, y: 728, icon: '🗺️', name: 'New Shop', fixed: 0 };
+const NEXT_SHOP_COST = 15000;
+
+// Each location is the same floor plan with a new look and bigger numbers.
+const LOCATIONS = [
+  { name: 'Corner Pizzeria', icon: '🧱', priceMult: 1,  costMult: 1,   orderMax: 3, carMult: 1,
+    theme: { sky: '#bfe3f2', ground: ['#86cf5e', '60,140,50', '170,230,120'], floor: { kind: 'wood', h: 30, s: 42, l: 66 },
+      tile: ['#fbf4e8', '#e8dac4'], wallKind: 'brick', wallHue: 10, wall: '#e7835f', trim: '#fff1dc',
+      leaf: '#4fb35a', leaf2: '#62c46a', trunk: '#8a5a3b', cloth: ['#e8473b', '#fff7ef'] } },
+  { name: 'Beach Shack', icon: '🏖️', priceMult: 3, costMult: 6, orderMax: 4, carMult: 1,
+    theme: { sky: '#a6e4f7', ground: ['#f1d796', '200,160,90', '255,240,200'], floor: { kind: 'wood', h: 38, s: 30, l: 76 },
+      tile: ['#f2fbfa', '#bfe9e4'], wallKind: 'planks', wallColor: '#4fc1bb', wall: '#5fd0c4', trim: '#fffaf0',
+      leaf: '#33b56a', leaf2: '#4cd082', trunk: '#b08050', cloth: ['#2fb3e0', '#fffaf0'] } },
+  { name: 'City Diner', icon: '🏙️', priceMult: 9, costMult: 36, orderMax: 4, carMult: 1.6,
+    theme: { sky: '#c9d6e3', ground: ['#a7adb5', '80,85,95', '200,205,210'], floor: { kind: 'checker', a: '#f4f4f2', b: '#2e3440' },
+      tile: ['#ffffff', '#f2b8b8'], wallKind: 'tiles', wallColor: '#3c6fd1', wall: '#4d7fe0', trim: '#f4f4f2',
+      leaf: '#3f9e5a', leaf2: '#56b46e', trunk: '#6b5040', cloth: ['#3c6fd1', '#ffffff'] } },
+  { name: 'Ski Lodge', icon: '🏔️', priceMult: 27, costMult: 216, orderMax: 5, carMult: 1.2,
+    theme: { sky: '#dce9f5', ground: ['#f3f7fb', '190,205,220', '255,255,255'], floor: { kind: 'wood', h: 24, s: 45, l: 45 },
+      tile: ['#f3ece0', '#dccdb5'], wallKind: 'logs', wallColor: '#8a5a3b', wall: '#9b6a45', trim: '#f3ece0',
+      leaf: '#2f7d4f', leaf2: '#3d9461', trunk: '#6b4630', cloth: ['#2f7d4f', '#f3ece0'] } },
+  { name: 'Moon Base', icon: '🚀', priceMult: 81, costMult: 1296, orderMax: 5, carMult: 2,
+    theme: { sky: '#161a33', ground: ['#8d8f99', '60,62,72', '180,182,190'], floor: { kind: 'metal' },
+      tile: ['#e3e6ec', '#c5cad3'], wallKind: 'panels', wallColor: '#5b6378', wall: '#6c7590', trim: '#d6dbe6',
+      leaf: '#7a7f8c', leaf2: '#9a9fac', trunk: '#5b5f6b', cloth: ['#7a5cff', '#e3e6ec'] } },
 ];
 
 // ================= upgrades =================
@@ -198,19 +251,26 @@ const UPGRADES = [
     desc: l => `Staff speed ${staffSpeed(l)}, carry ${staffCap(l)}`,
     next: l => `${staffSpeed(l + 1)}, ${staffCap(l + 1)}` },
 ];
-const upCost = u => Math.round(u.base * Math.pow(u.mult, S.up[u.id]));
-const upLocked = u => u.req && !S.unlocked[u.req];
-const canBuy = u => !upLocked(u) && S.up[u.id] < u.max && S.money >= upCost(u);
+const upCost = u => Math.round(u.base * Math.pow(u.mult, L.up[u.id]) * loc().costMult);
+const upLocked = u => u.req && !L.unlocked[u.req];
+const canBuy = u => !upLocked(u) && L.up[u.id] < u.max && S.money >= upCost(u);
 
 // ================= save state =================
 const SAVE_KEY = 'pizza-ready-noads-v1';
+const newShop = () => ({
+  unlocked: { oven1: true }, paid: {},
+  up: { speed: 0, cap: 0, oven: 0, price: 0, cust: 0, staff: 0 },
+  counter: 0, drive: 0, piles: { main: 0, drive: 0 },
+});
 function freshState() {
-  return {
-    money: 0, unlocked: { oven1: true }, paid: {},
-    up: { speed: 0, cap: 0, oven: 0, price: 0, cust: 0, staff: 0 },
-    counter: 0, drive: 0, piles: { main: 0, drive: 0 },
-    earned: 0, sound: true, zoom: 1.2, t: 0,
-  };
+  return { money: 0, earned: 0, sound: true, zoom: 1.2, t: 0, cur: 0, shops: [newShop()] };
+}
+function fixShop(d) {
+  const sh = newShop();
+  sh.unlocked = { ...d.unlocked, oven1: true }; sh.paid = { ...d.paid };
+  Object.assign(sh.up, d.up); Object.assign(sh.piles, d.piles);
+  sh.counter = d.counter | 0; sh.drive = d.drive | 0;
+  return sh;
 }
 function loadState() {
   const s = freshState();
@@ -219,15 +279,16 @@ function loadState() {
   if (!raw) return s;
   try {
     const d = JSON.parse(raw);
-    Object.assign(s, d);
-    s.up = Object.assign(freshState().up, d.up || {});
-    s.piles = Object.assign({ main: 0, drive: 0 }, d.piles || {});
-    s.unlocked = Object.assign({ oven1: true }, d.unlocked || {});
-    s.paid = d.paid || {};
+    for (const k of ['money', 'earned', 'sound', 'zoom', 't']) if (d[k] !== undefined) s[k] = d[k];
+    // Saves from before locations kept a single shop at the top level.
+    s.shops = Array.isArray(d.shops) && d.shops.length ? d.shops.map(fixShop) : [fixShop(d)];
+    s.shops.length = Math.min(s.shops.length, LOCATIONS.length);
+    s.cur = clamp(d.cur | 0, 0, s.shops.length - 1);
   } catch (e) {}
   return s;
 }
-let S = loadState();
+let S = loadState(), L = S.shops[S.cur];
+const loc = () => LOCATIONS[S.cur];
 function save() {
   S.t = Date.now();
   const data = JSON.stringify(S);
@@ -262,35 +323,48 @@ function makeWorker(id) {
   return {
     id: nextId++, key: id, type, x: DOOR_X, y: 760, dir: -Math.PI / 2, moving: false, stack: 0, actT: 0,
     state: 'fetch', oven: null, dest: 'counter', table: null,
-    off: id === 'carrier2' ? 24 : 0, seed: Math.random() * 10,
+    off: { carrier2: 24, carrier3: -24 }[id] || 0, seed: Math.random() * 10,
     skin: pick(SKINS), hair: pick(HAIRS), ...WORKER_LOOK[type],
   };
 }
 function syncWorld() {
   for (const id in OVEN_POS)
-    if (S.unlocked[id] && !ovens.some(o => o.id === id)) ovens.push({ id, ...OVEN_POS[id], stock: 0, timer: 0 });
+    if (L.unlocked[id] && !ovens.some(o => o.id === id)) ovens.push({ id, ...OVEN_POS[id], stock: 0, timer: 0 });
   for (const id in TABLE_POS)
-    if (S.unlocked[id] && !tables.some(t => t.id === id))
+    if (L.unlocked[id] && !tables.some(t => t.id === id))
       tables.push({ id, ...TABLE_POS[id], occupant: null, dirty: false, tip: 0, clean: 0 });
-  for (const id of ['cashier', 'carrier1', 'carrier2', 'cleaner', 'driver'])
-    if (S.unlocked[id] && !workers.some(w => w.key === id)) workers.push(makeWorker(id));
+  for (const id of ['cashier', ...CARRIERS, 'cleaner', 'driver'])
+    if (L.unlocked[id] && !workers.some(w => w.key === id)) workers.push(makeWorker(id));
 }
 syncWorld();
 
 const pickPt = o => P(o.x, o.y + 80);
-const price = () => pizzaPrice(S.up.price);
-const spawnTime = () => spawnTimeFor(S.up.cust) / (1 + 0.15 * (ovens.length - 1));
-const carTime = () => 11 * Math.pow(0.9, S.up.cust);
-const visibleZones = () => UNLOCKS.filter(d => !S.unlocked[d.id] && (!d.req || S.unlocked[d.req]));
+const price = () => pizzaPrice(L.up.price) * loc().priceMult;
+// More ovens and tables make the shop more popular.
+const spawnTimeOf = (cust, nOvens, nTables) => spawnTimeFor(cust) / (1 + 0.15 * (nOvens - 1) + 0.06 * nTables);
+const spawnTime = () => spawnTimeOf(L.up.cust, ovens.length, tables.length);
+const carTimeOf = (cust, li) => 11 * Math.pow(0.9, cust) / LOCATIONS[li].carMult;
+const carTime = () => carTimeOf(L.up.cust, S.cur);
+const zoneCost = d => d.fixed || d.cost * loc().costMult;
+function visibleZones() {
+  const z = UNLOCKS.filter(d => !L.unlocked[d.id] && (!d.req || L.unlocked[d.req]));
+  const next = S.shops.length;
+  if (!z.length && S.cur === next - 1 && next < LOCATIONS.length) {
+    const nl = LOCATIONS[next];
+    Object.assign(NEW_SHOP, { fixed: NEXT_SHOP_COST * nl.costMult, name: nl.name, icon: nl.icon });
+    z.push(NEW_SHOP);
+  }
+  return z;
+}
 const workerAt = (type, pt) => workers.some(w => w.type === type && dist(w, pt) < 6);
 const cashierPresent = () => dist(player, CASHIER) < 42 || workerAt('cashier', CASHIER);
-const drivePresent = () => S.unlocked.drive && (dist(player, DRIVE_CASHIER) < 42 || workerAt('driver', DRIVE_CASHIER));
+const drivePresent = () => L.unlocked.drive && (dist(player, DRIVE_CASHIER) < 42 || workerAt('driver', DRIVE_CASHIER));
 
 function obstacles() {
   const r = [COUNTER];
   for (const o of ovens) r.push({ x: o.x - 50, y: o.y - 35, w: 100, h: 88 });
   for (const t of tables) r.push({ x: t.x - 40, y: t.y - 25, w: 80, h: 48 });
-  if (S.unlocked.drive) r.push(DRIVE_COUNTER);
+  if (L.unlocked.drive) r.push(DRIVE_COUNTER);
   return r;
 }
 function pushOut(e, r, rad) {
@@ -309,7 +383,7 @@ function pushOut(e, r, rad) {
 const keys = {};
 const pointer = { down: false, sx: 0, sy: 0, x: 0, y: 0 };
 const GAME_KEYS = ['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight',
-  'Space', 'KeyU', 'KeyM', 'Escape', 'Minus', 'Equal'];
+  'Space', 'KeyU', 'KeyM', 'KeyL', 'Escape', 'Minus', 'Equal'];
 addEventListener('keydown', e => {
   if (GAME_KEYS.includes(e.code)) e.preventDefault();
   initAudio();
@@ -319,7 +393,8 @@ addEventListener('keydown', e => {
   keys[e.code] = true;
   if (e.code === 'KeyU') togglePanel();
   if (e.code === 'KeyM') toggleSound();
-  if (e.code === 'Escape') togglePanel(false);
+  if (e.code === 'KeyL') toggleShops();
+  if (e.code === 'Escape') { togglePanel(false); toggleShops(false); }
 });
 addEventListener('keyup', e => { keys[e.code] = false; if (GAME_KEYS.includes(e.code)) e.preventDefault(); });
 addEventListener('blur', () => { for (const k in keys) keys[k] = false; pointer.down = false; });
@@ -391,7 +466,7 @@ function updatePlayer(dt) {
   }
   const m = Math.hypot(vx, vy);
   if (m > 0) {
-    const sp = playerSpeed(S.up.speed);
+    const sp = playerSpeed(L.up.speed);
     player.x += vx / m * sp * dt; player.y += vy / m * sp * dt;
     player.dir = Math.atan2(vy, vx); player.moving = true;
   } else player.moving = false;
@@ -401,7 +476,7 @@ function updatePlayer(dt) {
 
   // pick up, drop off
   player.actT -= dt;
-  const cap = carryCap(S.up.cap);
+  const cap = carryCap(L.up.cap);
   if (player.actT <= 0) {
     for (const o of ovens) {
       if (o.stock > 0 && player.stack < cap && dist(player, pickPt(o)) < 50) {
@@ -410,16 +485,16 @@ function updatePlayer(dt) {
     }
   }
   if (player.actT <= 0 && player.stack > 0) {
-    if (dist(player, DROP) < 50 && S.counter < COUNTER_MAX) {
-      S.counter++; player.stack--; player.actT = 0.07; sfx.pop();
-    } else if (S.unlocked.drive && dist(player, DRIVE_DROP) < 50 && S.drive < DRIVE_MAX) {
-      S.drive++; player.stack--; player.actT = 0.07; sfx.pop();
+    if (dist(player, DROP) < 50 && L.counter < COUNTER_MAX) {
+      L.counter++; player.stack--; player.actT = 0.07; sfx.pop();
+    } else if (L.unlocked.drive && dist(player, DRIVE_DROP) < 50 && L.drive < DRIVE_MAX) {
+      L.drive++; player.stack--; player.actT = 0.07; sfx.pop();
     }
   }
   // collect cash
   for (const k in PILES) {
-    if (S.piles[k] > 0 && dist(player, PILES[k]) < 50) {
-      const amt = S.piles[k]; S.piles[k] = 0;
+    if (L.piles[k] > 0 && dist(player, PILES[k]) < 50) {
+      const amt = L.piles[k]; L.piles[k] = 0;
       earn(amt, player.x, player.y);
       addCoins(PILES[k].x, PILES[k].y - 10, player, Math.min(12, 3 + Math.floor(amt / 20)));
       sfx.cash();
@@ -436,12 +511,12 @@ function updatePlayer(dt) {
 
 function cleanTable(t, byPlayer) {
   if (byPlayer) { earn(t.tip, t.x, t.y); sfx.cash(); }
-  else S.piles.main += t.tip;
+  else L.piles.main += t.tip;
   t.dirty = false; t.clean = 0; t.tip = 0;
 }
 
 function updateOvens(dt) {
-  const max = ovenMax(S.up.oven), bake = ovenTime(S.up.oven);
+  const max = ovenMax(L.up.oven), bake = ovenTime(L.up.oven);
   for (const o of ovens) {
     if (o.stock >= max) { o.timer = 0; continue; }
     o.timer += dt;
@@ -450,7 +525,7 @@ function updateOvens(dt) {
 }
 
 function updateWorkers(dt) {
-  const sp = staffSpeed(S.up.staff);
+  const sp = staffSpeed(L.up.staff);
   for (const w of workers) {
     w.actT -= dt;
     if (w.type === 'cashier') { if (moveTo(w, CASHIER.x, CASHIER.y, sp, dt)) w.dir = Math.PI / 2; }
@@ -461,12 +536,12 @@ function updateWorkers(dt) {
 }
 
 function updateCarrier(w, sp, dt) {
-  const cap = staffCap(S.up.staff);
+  const cap = staffCap(L.up.staff);
   const anyStock = ovens.some(o => o.stock > 0);
   if (w.state === 'fetch') {
     if (w.stack >= cap || (w.stack > 0 && !anyStock)) {
       w.state = 'deliver';
-      w.dest = S.unlocked.drive && S.drive < S.counter ? 'drive' : 'counter';
+      w.dest = L.unlocked.drive && L.drive < L.counter ? 'drive' : 'counter';
       return;
     }
     if (!w.oven || (w.oven.stock === 0 && anyStock))
@@ -479,8 +554,8 @@ function updateCarrier(w, sp, dt) {
   } else {
     const d = w.dest === 'drive' ? DRIVE_DROP : DROP;
     if (moveTo(w, d.x + w.off, d.y, sp, dt) && w.actT <= 0) {
-      if (w.dest === 'drive' && S.drive < DRIVE_MAX) { S.drive++; w.stack--; w.actT = 0.1; }
-      else if (w.dest === 'counter' && S.counter < COUNTER_MAX) { S.counter++; w.stack--; w.actT = 0.1; }
+      if (w.dest === 'drive' && L.drive < DRIVE_MAX) { L.drive++; w.stack--; w.actT = 0.1; }
+      else if (w.dest === 'counter' && L.counter < COUNTER_MAX) { L.counter++; w.stack--; w.actT = 0.1; }
       if (w.stack <= 0) { w.stack = 0; w.state = 'fetch'; w.oven = null; }
     }
   }
@@ -500,7 +575,7 @@ function updateCleaner(w, sp, dt) {
 function spawnCustomer() {
   queue.push({
     id: nextId++, x: SPAWN.x + rand(-8, 8), y: SPAWN.y, dir: -Math.PI / 2, moving: true,
-    order: randi(1, 3), got: 0, stack: 0, dine: Math.random() < 0.65,
+    order: randi(1, loc().orderMax), got: 0, stack: 0, dine: Math.random() < 0.65,
     state: 'queue', path: [], next: null, table: null, timer: 0, seed: Math.random() * 10,
     shirt: pick(SHIRTS), skin: pick(SKINS), hair: pick(HAIRS), pants: pick(PANTS), hairStyle: randi(0, 2),
   });
@@ -509,13 +584,14 @@ function spawnCustomer() {
 function finishOrder(c) {
   queue.shift();
   const pay = c.order * price();
-  S.piles.main += pay;
+  L.piles.main += pay;
   addFloat(QUEUE_X, QUEUE_Y, '$' + fmt(pay), 'gold');
   c.stack = c.order; c.state = 'walk';
   const t = c.dine ? tables.find(t => !t.occupant && !t.dirty) : null;
   if (t) {
     t.occupant = c; c.table = t; c.next = 'eat';
-    c.path = [P(AISLE_X, QUEUE_Y), P(AISLE_X, t.y + 45), P(t.x, t.y + 45)];
+    // Walk in the row below the chairs so customers do not cross other tables.
+    c.path = [P(t.aisle, QUEUE_Y), P(t.aisle, t.y + 80), P(t.x, t.y + 80), P(t.x, t.y + 45)];
   } else {
     c.next = 'gone';
     c.path = [P(LEAVE_X, QUEUE_Y + 10), P(LEAVE_X, 860)];
@@ -533,7 +609,7 @@ function updateCustomers(dt) {
   const f = queue[0];
   if (f && f.x === QUEUE_X && f.y === QUEUE_Y && cashierPresent()) {
     serveT -= dt;
-    if (serveT <= 0 && f.got < f.order && S.counter > 0) { S.counter--; f.got++; serveT = 0.22; }
+    if (serveT <= 0 && f.got < f.order && L.counter > 0) { L.counter--; f.got++; serveT = 0.22; }
     if (f.got >= f.order) finishOrder(f);
   }
   for (let i = walkers.length - 1; i >= 0; i--) {
@@ -544,7 +620,7 @@ function updateCustomers(dt) {
         const t = c.table;
         t.occupant = null; t.dirty = true; t.tip = Math.round(price() * c.order * 0.5) + 2;
         c.table = null; c.state = 'walk'; c.next = 'gone';
-        c.path = [P(AISLE_X, t.y + 45), P(AISLE_X, 720), P(LEAVE_X, 760), P(LEAVE_X, 860)];
+        c.path = [P(t.x, t.y + 80), P(t.aisle, t.y + 80), P(t.aisle, 740), P(LEAVE_X, 760), P(LEAVE_X, 860)];
       }
       continue;
     }
@@ -555,7 +631,7 @@ function updateCustomers(dt) {
 }
 
 function updateCars(dt) {
-  if (S.unlocked.drive) {
+  if (L.unlocked.drive) {
     carT -= dt;
     if (carT <= 0) {
       carT = carTime() * rand(0.8, 1.2);
@@ -566,11 +642,11 @@ function updateCars(dt) {
   const f = carQueue[0];
   if (f && f.y === CAR_Y && drivePresent()) {
     driveServeT -= dt;
-    if (driveServeT <= 0 && f.got < f.order && S.drive > 0) { S.drive--; f.got++; driveServeT = 0.2; }
+    if (driveServeT <= 0 && f.got < f.order && L.drive > 0) { L.drive--; f.got++; driveServeT = 0.2; }
     if (f.got >= f.order) {
       carQueue.shift(); driveServeT = 0.4;
       const pay = Math.round(f.order * price() * 1.5);
-      S.piles.drive += pay;
+      L.piles.drive += pay;
       addFloat(CAR_X, CAR_Y, '$' + fmt(pay), 'gold');
       carsOut.push(f);
     }
@@ -585,23 +661,45 @@ function updateZones(dt) {
     if (!inside) { zoneStand[d.id] = 0; continue; }
     zoneStand[d.id] = (zoneStand[d.id] || 0) + dt;
     if (zoneStand[d.id] < 0.25 || S.money <= 0) continue;
-    const paid = S.paid[d.id] || 0;
-    const amt = Math.min(Math.max(d.cost / 1.5, 20) * dt, S.money, d.cost - paid);
-    S.money -= amt; S.paid[d.id] = paid + amt;
+    const paid = L.paid[d.id] || 0, cost = zoneCost(d);
+    const amt = Math.min(Math.max(cost / 1.5, 20) * dt, S.money, cost - paid);
+    S.money -= amt; L.paid[d.id] = paid + amt;
     if (Math.random() < 0.3) fx.push({ k: 'c', x0: player.x, y0: player.y, tgt: P(d.x, d.y), age: 0, life: 0.35 });
-    if (S.paid[d.id] >= d.cost - 1e-6) unlock(d);
+    if (L.paid[d.id] >= cost - 1e-6) unlock(d);
   }
 }
 
 function unlock(d) {
-  S.unlocked[d.id] = true; delete S.paid[d.id];
+  if (d === NEW_SHOP) {
+    delete L.paid[d.id];
+    S.shops.push(newShop());
+    goToShop(S.shops.length - 1);
+    sfx.unlock();
+    return;
+  }
+  L.unlocked[d.id] = true; delete L.paid[d.id];
   syncWorld(); confetti(d.x, d.y); sfx.unlock();
   toast(`${d.icon} ${d.name} unlocked!`);
   save();
 }
 
+function goToShop(i) {
+  save();
+  S.cur = i; L = S.shops[i];
+  for (const a of [ovens, tables, workers, queue, walkers, carQueue, carsOut, fx]) a.length = 0;
+  Object.assign(player, { x: 600, y: 210, stack: 0, dir: Math.PI / 2, moving: false });
+  spawnT = 1.5; carT = 4;
+  syncWorld();
+  resetScene();
+  toast(`${loc().icon} Welcome to ${loc().name}!`);
+  save();
+}
+
 function update(dt) {
   time += dt;
+  // Other shops keep running in the background at their idle rate.
+  const bg = otherShopsRate();
+  S.money += bg * dt; S.earned += bg * dt;
   updatePlayer(dt);
   updateOvens(dt);
   updateWorkers(dt);
@@ -611,16 +709,20 @@ function update(dt) {
   updateFx(dt);
 }
 
-// Money per second the staff makes while you are away. Needs a cashier and a baker.
-function idleRate() {
-  if (!S.unlocked.cashier || !S.unlocked.carrier1) return 0;
-  const prod = ovens.length / ovenTime(S.up.oven);
-  const drive = S.unlocked.drive && S.unlocked.driver ? 4.5 / carTime() : 0;
-  const demand = 2 / spawnTime() + drive;
-  const carriers = S.unlocked.carrier2 ? 2 : 1;
-  const haul = carriers * staffCap(S.up.staff) / 7;
-  return Math.min(prod, demand, haul) * price() * 0.5;
+// Money per second a shop makes without the player. Needs a cashier and a baker.
+function idleRateFor(sh, li) {
+  const u = sh.unlocked, lc = LOCATIONS[li];
+  if (!u.cashier || !u.carrier1) return 0;
+  const nOvens = Object.keys(OVEN_POS).filter(id => u[id]).length;
+  const nTables = Object.keys(TABLE_POS).filter(id => u[id]).length;
+  const prod = nOvens / ovenTime(sh.up.oven);
+  const drive = u.drive && u.driver ? 4.5 / carTimeOf(sh.up.cust, li) : 0;
+  const demand = (1 + lc.orderMax) / 2 / spawnTimeOf(sh.up.cust, nOvens, nTables) + drive;
+  const haul = CARRIERS.filter(id => u[id]).length * staffCap(sh.up.staff) / 7;
+  return Math.min(prod, demand, haul) * pizzaPrice(sh.up.price) * lc.priceMult * 0.5;
 }
+const idleRate = () => S.shops.reduce((a, sh, i) => a + idleRateFor(sh, i), 0);
+const otherShopsRate = () => S.shops.reduce((a, sh, i) => i === S.cur ? a : a + idleRateFor(sh, i), 0);
 function creditAway(sec) {
   sec = Math.min(sec, 8 * 3600);
   const amt = Math.floor(idleRate() * sec);
@@ -718,38 +820,11 @@ const noise = (ctx, w, h, n, a) => {
   for (let i = 0; i < n; i++) { ctx.fillStyle = `rgba(${Math.random() < 0.5 ? '0,0,0' : '255,255,255'},${a})`; ctx.fillRect(Math.random() * w, Math.random() * h, 2, 2); }
 };
 const TEX = {
-  tile: canvasTex(128, 128, (c, w) => {
-    for (let i = 0; i < 2; i++) for (let j = 0; j < 2; j++) { c.fillStyle = (i + j) % 2 ? '#e8dac4' : '#fbf4e8'; c.fillRect(i * 64, j * 64, 64, 64); }
-    c.strokeStyle = 'rgba(150,120,90,.25)'; c.lineWidth = 2;
-    for (let i = 0; i <= 2; i++) { c.beginPath(); c.moveTo(i * 64, 0); c.lineTo(i * 64, w); c.moveTo(0, i * 64); c.lineTo(w, i * 64); c.stroke(); }
-  }),
-  wood: canvasTex(256, 256, (c, w, h) => {
-    for (let r = 0; r < 8; r++) {
-      const off = (r % 2) * 96;
-      for (let x = -off; x < w; x += 192) {
-        c.fillStyle = `hsl(${30 + Math.random() * 6},${42 + Math.random() * 8}%,${66 + Math.random() * 7}%)`;
-        c.fillRect(x, r * 32, 192, 32);
-        c.fillStyle = 'rgba(110,65,30,.25)'; c.fillRect(x, r * 32, 2, 32);
-      }
-      c.fillStyle = 'rgba(110,65,30,.22)'; c.fillRect(0, r * 32, w, 2);
-    }
-    noise(c, w, h, 1500, 0.05);
-  }),
-  brick: canvasTex(256, 128, (c, w, h) => {
-    c.fillStyle = '#e9d2b4'; c.fillRect(0, 0, w, h);
-    for (let r = 0; r < 8; r++) for (let x = -(r % 2) * 16; x < w; x += 32) {
-      c.fillStyle = `hsl(${10 + Math.random() * 8},${52 + Math.random() * 10}%,${48 + Math.random() * 8}%)`;
-      c.fillRect(x + 1.5, r * 16 + 1.5, 29, 13);
-    }
-    noise(c, w, h, 800, 0.06);
-  }),
-  cloth: canvasTex(64, 64, c => {
-    for (let i = 0; i < 4; i++) for (let j = 0; j < 4; j++) { c.fillStyle = (i + j) % 2 ? '#e8473b' : '#fff7ef'; c.fillRect(i * 16, j * 16, 16, 16); }
-  }),
-  grass: canvasTex(128, 128, (c, w, h) => {
-    c.fillStyle = '#86cf5e'; c.fillRect(0, 0, w, h);
-    for (let i = 0; i < 400; i++) { c.fillStyle = `rgba(${Math.random() < 0.5 ? '60,140,50' : '170,230,120'},.35)`; c.fillRect(Math.random() * w, Math.random() * h, 2, 3); }
-  }),
+  tile: canvasTex(128, 128, () => {}),
+  wood: canvasTex(256, 256, () => {}),
+  brick: canvasTex(256, 128, () => {}),
+  cloth: canvasTex(64, 64, () => {}),
+  grass: canvasTex(128, 128, () => {}),
   asphalt: canvasTex(128, 128, (c, w, h) => { c.fillStyle = '#545a63'; c.fillRect(0, 0, w, h); noise(c, w, h, 900, 0.08); }),
   boxTop: canvasTex(128, 128, (c, w, h) => {
     c.fillStyle = '#efcf9b'; c.fillRect(0, 0, w, h);
@@ -771,7 +846,8 @@ const TEX = {
     c.strokeStyle = '#2e9a58'; c.lineWidth = 3; c.strokeRect(3, 3, w - 6, h - 6);
     c.fillStyle = '#2e9a58'; c.font = `900 20px ${UI_FONT}`; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('$', 32, 17);
   }),
-  stripes: canvasTex(64, 64, c => { for (let i = 0; i < 4; i++) { c.fillStyle = i % 2 ? '#fff7ef' : '#e8473b'; c.fillRect(i * 16, 0, 16, 64); } }),
+  stripes: canvasTex(64, 64, () => {}),
+  sign: canvasTex(512, 96, () => {}),
 };
 
 function plane(w, d, mat, x, z, y = 0, uvScale = 0) {
@@ -819,15 +895,10 @@ for (const [x0, x1] of [[82, DOOR_X - 75], [DOOR_X + 75, 1198]]) {
 for (const [x0, y0, x1, y1] of [[80, 38, 92, 780], [1188, 38, 1200, 780]])
   wall(x0, y0, x1, y1, 0.06, trimMat).position.y = 1.23;
 
-// sign on the back wall
+// sign on the back wall, between the last oven and the windows
 {
-  const tex = canvasTex(512, 96, (c, w, h) => {
-    c.fillStyle = '#3a2416'; c.beginPath(); c.roundRect(0, 0, w, h, 24); c.fill();
-    c.fillStyle = '#ffd25a'; c.font = `900 56px ${UI_FONT}`; c.textAlign = 'center'; c.textBaseline = 'middle';
-    c.fillText('🍕 PIZZA READY', w / 2, h / 2 + 3);
-  });
-  const sign = new THREE.Mesh(new THREE.PlaneGeometry(5, 0.94), decalMat(tex));
-  sign.position.set(X(720), 2.0, Z(40) + 0.02); scene.add(sign);
+  const sign = new THREE.Mesh(new THREE.PlaneGeometry(3.7, 0.69), decalMat(TEX.sign));
+  sign.position.set(X(862), 2.0, Z(40) + 0.02); scene.add(sign);
 }
 // windows with awnings above the dining room
 for (const wx of [980, 1110]) {
@@ -847,13 +918,16 @@ function plant(x, y, s = 1) {
     add(g, G('ico' + r, () => new THREE.IcosahedronGeometry(r, 0)), leaf, lx, ly, lz);
   scene.add(g);
 }
-plant(1165, 70); plant(870, 70); plant(1165, 745); plant(115, 745, 0.9);
+plant(1165, 70); plant(1165, 745); plant(115, 745, 0.9);
 // trees and bushes outside
+const leafMat = new THREE.MeshStandardMaterial({ roughness: 0.8, flatShading: true });
+const leafMat2 = new THREE.MeshStandardMaterial({ roughness: 0.8, flatShading: true });
+const trunkMat = new THREE.MeshStandardMaterial({ roughness: 0.9 });
 function tree(x, z, s) {
   const g = new THREE.Group(); g.position.set(x, 0, z); g.scale.setScalar(s);
-  add(g, gCyl(0.15, 0.2, 1.0, 8), '#8a5a3b', 0, 0.5, 0);
-  add(g, G('treeTop', () => new THREE.IcosahedronGeometry(0.9, 0)), M('#4fb35a', { flatShading: true }), 0, 1.5, 0);
-  add(g, G('treeTop2', () => new THREE.IcosahedronGeometry(0.6, 0)), M('#62c46a', { flatShading: true }), 0.25, 2.1, 0.1);
+  add(g, gCyl(0.15, 0.2, 1.0, 8), trunkMat, 0, 0.5, 0);
+  add(g, G('treeTop', () => new THREE.IcosahedronGeometry(0.9, 0)), leafMat, 0, 1.5, 0);
+  add(g, G('treeTop2', () => new THREE.IcosahedronGeometry(0.6, 0)), leafMat2, 0.25, 2.1, 0.1);
   scene.add(g);
 }
 for (let i = 0; i < 22; i++) {
@@ -864,7 +938,7 @@ for (let i = 0; i < 22; i++) {
 }
 for (let i = 0; i < 9; i++) {
   if (i === 4) continue; // door path
-  add(scene, G('bush', () => new THREE.IcosahedronGeometry(0.42, 0)), M('#57b85b', { flatShading: true }), -11.5 + i * 3.1, 0.3, Z(800));
+  add(scene, G('bush', () => new THREE.IcosahedronGeometry(0.42, 0)), leafMat2, -11.5 + i * 3.1, 0.3, Z(800));
 }
 
 // drive-thru road (shown after unlock)
@@ -884,6 +958,101 @@ const driveRoad = new THREE.Group();
   paint.rotation.x = -Math.PI / 2; paint.rotation.z = Math.PI / 2; paint.position.set(X(41), 0.01, Z(430));
   driveRoad.add(paint);
   scene.add(driveRoad);
+}
+
+// ---- themes ----
+function paint(tex, draw) {
+  const cv = tex.image, c = cv.getContext('2d');
+  c.clearRect(0, 0, cv.width, cv.height); draw(c, cv.width, cv.height); tex.needsUpdate = true;
+}
+// Random light or dark overlay, used to vary boards and logs.
+const shade = (c, x, y, w, h, a) => { c.fillStyle = `rgba(${Math.random() < 0.5 ? '0,0,0' : '255,255,255'},${Math.random() * a})`; c.fillRect(x, y, w, h); };
+function paintFloor(c, w, h, f) {
+  if (f.kind === 'checker') {
+    for (let i = 0; i < 4; i++) for (let j = 0; j < 4; j++) { c.fillStyle = (i + j) % 2 ? f.b : f.a; c.fillRect(i * 64, j * 64, 64, 64); }
+  } else if (f.kind === 'metal') {
+    c.fillStyle = '#9aa1ad'; c.fillRect(0, 0, w, h);
+    for (let i = 0; i < 2; i++) for (let j = 0; j < 2; j++) {
+      shade(c, i * 128 + 3, j * 128 + 3, 122, 122, 0.12);
+      c.strokeStyle = 'rgba(40,45,60,.45)'; c.lineWidth = 3; c.strokeRect(i * 128 + 1.5, j * 128 + 1.5, 125, 125);
+      c.fillStyle = 'rgba(40,45,60,.5)';
+      for (const [rx, ry] of [[10, 10], [118, 10], [10, 118], [118, 118]]) { c.beginPath(); c.arc(i * 128 + rx, j * 128 + ry, 3, 0, Math.PI * 2); c.fill(); }
+    }
+  } else {
+    for (let r = 0; r < 8; r++) {
+      for (let x = -(r % 2) * 96; x < w; x += 192) {
+        c.fillStyle = `hsl(${f.h + Math.random() * 6},${f.s + Math.random() * 8}%,${f.l + Math.random() * 7}%)`;
+        c.fillRect(x, r * 32, 192, 32);
+        c.fillStyle = 'rgba(110,65,30,.25)'; c.fillRect(x, r * 32, 2, 32);
+      }
+      c.fillStyle = 'rgba(110,65,30,.22)'; c.fillRect(0, r * 32, w, 2);
+    }
+  }
+  noise(c, w, h, 1500, 0.05);
+}
+function paintWall(c, w, h, th) {
+  c.fillStyle = th.wallColor || '#e9d2b4'; c.fillRect(0, 0, w, h);
+  if (th.wallKind === 'brick') {
+    c.fillStyle = '#e9d2b4'; c.fillRect(0, 0, w, h);
+    for (let r = 0; r < 8; r++) for (let x = -(r % 2) * 16; x < w; x += 32) {
+      c.fillStyle = `hsl(${th.wallHue + Math.random() * 8},${52 + Math.random() * 10}%,${48 + Math.random() * 8}%)`;
+      c.fillRect(x + 1.5, r * 16 + 1.5, 29, 13);
+    }
+  } else if (th.wallKind === 'planks') {
+    for (let x = 0; x < w; x += 32) { shade(c, x, 0, 32, h, 0.14); c.fillStyle = 'rgba(0,0,0,.25)'; c.fillRect(x, 0, 2, h); }
+  } else if (th.wallKind === 'logs') {
+    for (let y = 0; y < h; y += 32) {
+      const g = c.createLinearGradient(0, y, 0, y + 32);
+      g.addColorStop(0, 'rgba(0,0,0,.35)'); g.addColorStop(0.35, 'rgba(255,255,255,.12)'); g.addColorStop(1, 'rgba(0,0,0,.4)');
+      c.fillStyle = g; c.fillRect(0, y, w, 32);
+    }
+  } else if (th.wallKind === 'tiles') {
+    for (let y = 0; y < h; y += 16) for (let x = 0; x < w; x += 16) { shade(c, x, y, 16, 16, 0.1); }
+    c.fillStyle = 'rgba(255,255,255,.7)';
+    for (let i = 0; i <= w; i += 16) c.fillRect(i, 0, 1.5, h);
+    for (let i = 0; i <= h; i += 16) c.fillRect(0, i, w, 1.5);
+  } else if (th.wallKind === 'panels') {
+    for (let x = 0; x < w; x += 64) for (let y = 0; y < h; y += 64) {
+      shade(c, x + 2, y + 2, 60, 60, 0.12);
+      c.strokeStyle = 'rgba(20,25,40,.5)'; c.lineWidth = 3; c.strokeRect(x + 1.5, y + 1.5, 61, 61);
+    }
+  }
+  noise(c, w, h, 800, 0.06);
+}
+function paintSign(name) {
+  paint(TEX.sign, (c, w, h) => {
+    c.fillStyle = '#3a2416'; c.beginPath(); c.roundRect(0, 0, w, h, 24); c.fill();
+    const t = '🍕 ' + name.toUpperCase();
+    c.font = `900 52px ${UI_FONT}`;
+    const tw = c.measureText(t).width;
+    if (tw > w - 40) c.font = `900 ${Math.floor(52 * (w - 40) / tw)}px ${UI_FONT}`;
+    c.fillStyle = '#ffd25a'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(t, w / 2, h / 2 + 3);
+  });
+}
+function applyTheme(th) {
+  scene.background.set(th.sky); scene.fog.color.set(th.sky);
+  paint(TEX.grass, (c, w, h) => {
+    c.fillStyle = th.ground[0]; c.fillRect(0, 0, w, h);
+    for (let i = 0; i < 400; i++) { c.fillStyle = `rgba(${Math.random() < 0.5 ? th.ground[1] : th.ground[2]},.35)`; c.fillRect(Math.random() * w, Math.random() * h, 2, 3); }
+  });
+  paint(TEX.wood, (c, w, h) => paintFloor(c, w, h, th.floor));
+  paint(TEX.tile, (c, w) => {
+    for (let i = 0; i < 2; i++) for (let j = 0; j < 2; j++) { c.fillStyle = th.tile[(i + j) % 2]; c.fillRect(i * 64, j * 64, 64, 64); }
+    c.strokeStyle = 'rgba(150,120,90,.25)'; c.lineWidth = 2;
+    for (let i = 0; i <= 2; i++) { c.beginPath(); c.moveTo(i * 64, 0); c.lineTo(i * 64, w); c.moveTo(0, i * 64); c.lineTo(w, i * 64); c.stroke(); }
+  });
+  paint(TEX.brick, (c, w, h) => paintWall(c, w, h, th));
+  paint(TEX.cloth, c => { for (let i = 0; i < 4; i++) for (let j = 0; j < 4; j++) { c.fillStyle = th.cloth[(i + j) % 2]; c.fillRect(i * 16, j * 16, 16, 16); } });
+  paint(TEX.stripes, c => { for (let i = 0; i < 4; i++) { c.fillStyle = th.cloth[i % 2]; c.fillRect(i * 16, 0, 16, 64); } });
+  wallMat.color.set(th.wall); trimMat.color.set(th.trim);
+  leafMat.color.set(th.leaf); leafMat2.color.set(th.leaf2); trunkMat.color.set(th.trunk);
+  paintSign(loc().name);
+}
+// Called after switching shops: entity meshes get rebuilt without the pop-in animation.
+function resetScene() {
+  firstSync = true;
+  driveCounter.userData.born = undefined;
+  applyTheme(loc().theme);
 }
 
 // ---- counters ----
@@ -1019,11 +1188,11 @@ function makeZoneObj(d) {
   return { root: mesh, c, tex, key: '' };
 }
 function drawZone(o, d) {
-  const paid = S.paid[d.id] || 0, left = Math.ceil(d.cost - paid), afford = S.money >= d.cost - paid;
-  const key = `${left}|${afford}`;
+  const cost = zoneCost(d), paid = L.paid[d.id] || 0, left = Math.ceil(cost - paid), afford = S.money >= cost - paid;
+  const key = `${left}|${afford}|${d.name}`;
   if (key === o.key) return;
   o.key = key;
-  const c = o.c.getContext('2d'), frac = paid / d.cost;
+  const c = o.c.getContext('2d'), frac = paid / cost;
   c.clearRect(0, 0, 256, 256);
   c.save(); c.beginPath(); c.roundRect(14, 14, 228, 228, 36); c.clip();
   c.fillStyle = afford ? 'rgba(255,255,255,.55)' : 'rgba(255,255,255,.35)'; c.fillRect(0, 0, 256, 256);
@@ -1032,7 +1201,11 @@ function drawZone(o, d) {
   c.setLineDash([26, 16]); c.lineWidth = 12; c.strokeStyle = afford ? '#22b573' : '#ffffff';
   c.beginPath(); c.roundRect(14, 14, 228, 228, 36); c.stroke();
   c.textAlign = 'center'; c.textBaseline = 'middle';
-  c.fillStyle = '#4a3112'; c.font = `900 30px ${UI_FONT}`; c.fillText(d.name.toUpperCase(), 128, 52);
+  const name = d.name.toUpperCase();
+  c.fillStyle = '#4a3112'; c.font = `900 30px ${UI_FONT}`;
+  const nw = c.measureText(name).width;
+  if (nw > 200) c.font = `900 ${Math.floor(30 * 200 / nw)}px ${UI_FONT}`;
+  c.fillText(name, 128, 52);
   c.font = `76px ${UI_FONT}`; c.fillText(d.icon, 128, 124);
   c.fillStyle = afford ? '#0f8a52' : '#4a3112'; c.font = `900 44px ${UI_FONT}`; c.fillText('$' + fmt(left), 128, 200);
   o.tex.needsUpdate = true;
@@ -1122,7 +1295,7 @@ function sweepLabels() {
 // ---- camera ----
 const cam = { zoom: clamp(S.zoom || 1.2, 0.55, 1.8), tx: X(player.x), tz: Z(player.y) };
 function zoomBy(f) { cam.zoom = clamp(cam.zoom * f, 0.55, 1.8); S.zoom = cam.zoom; }
-addEventListener('wheel', e => { if (!panel.hidden) return; e.preventDefault(); zoomBy(Math.exp(e.deltaY * 0.0015)); }, { passive: false });
+addEventListener('wheel', e => { if (!panel.hidden || !shopsPanel.hidden) return; e.preventDefault(); zoomBy(Math.exp(e.deltaY * 0.0015)); }, { passive: false });
 function updateCamera(dt) {
   const aspect = innerWidth / innerHeight;
   const d = 22 * cam.zoom * Math.max(1, 1.45 / aspect);
@@ -1147,6 +1320,7 @@ addEventListener('pointerup', () => { pointer.down = false; });
 // ---- per-frame scene sync ----
 const objs = new Map();
 let syncFrame = 0, firstSync = true;
+applyTheme(loc().theme);
 const easeOutBack = t => 1 + 2.70158 * Math.pow(t - 1, 3) + 1.70158 * Math.pow(t - 1, 2);
 function objFor(e, make) {
   let o = objs.get(e);
@@ -1184,8 +1358,9 @@ function animPerson(e, dt) {
 function syncScene(dt) {
   syncFrame++;
   boxIM.count = billIM.count = coinIM.count = confIM.count = 0;
-  const max = ovenMax(S.up.oven);
+  const max = ovenMax(L.up.oven);
 
+  for (const k in ovenMats) ovenMats[k].visible = false;
   for (const o of ovens) {
     const ob = objFor(o, makeOvenObj);
     popScale(ob);
@@ -1196,24 +1371,25 @@ function syncScene(dt) {
     ob.light.intensity = 1 + f * 0.8;
     for (let i = 0; i < o.stock; i++) pushInst(boxIM, x + (i < 8 ? -0.37 : 0.37), 0.85 + 0.065 + BOX_H * (i % 8), z + 1.25, (i % 3 - 1) * 0.04);
     if (!ovenMats[o.id]) ovenMats[o.id] = makeMat(pickPt(o), 'PICK UP', '🍕', '#ffffff');
-    const pct = Math.round(o.timer / ovenTime(S.up.oven) * 100);
+    ovenMats[o.id].visible = true;
+    const pct = Math.round(o.timer / ovenTime(L.up.oven) * 100);
     label('oven' + o.id, x, 2.75, z, o.stock >= max ? '<span class="tag">FULL</span>' : `<div class="bar"><i style="width:${pct}%"></i></div>`);
   }
 
   // counter stock
   const cz = Z(COUNTER.y + COUNTER.h / 2);
-  for (let i = 0; i < S.counter; i++) pushInst(boxIM, X(COUNTER.x + 24 + Math.floor(i / 10) * 28), 1.06 + 0.065 + BOX_H * (i % 10), cz, (i % 3 - 1) * 0.05);
-  if (S.counter >= COUNTER_MAX) label('cfull', X(COUNTER.x + 66), 2.9, cz, '<span class="tag">FULL</span>');
+  for (let i = 0; i < L.counter; i++) pushInst(boxIM, X(COUNTER.x + 24 + Math.floor(i / 10) * 28), 1.06 + 0.065 + BOX_H * (i % 10), cz, (i % 3 - 1) * 0.05);
+  if (L.counter >= COUNTER_MAX) label('cfull', X(COUNTER.x + 66), 2.9, cz, '<span class="tag">FULL</span>');
 
   // drive-thru
-  const driveOn = !!S.unlocked.drive;
+  const driveOn = !!L.unlocked.drive;
   if (driveOn && driveCounter.userData.born === undefined) driveCounter.userData.born = firstSync ? -10 : time;
   driveCounter.visible = driveRoad.visible = driveWallSill.visible = driveOn;
   driveWallFull.visible = !driveOn;
   driveMats.forEach(m => { m.visible = driveOn; });
   if (driveOn) {
     driveCounter.scale.setScalar(Math.max(0.001, easeOutBack(clamp((time - driveCounter.userData.born) / 0.45, 0, 1))));
-    for (let i = 0; i < S.drive; i++)
+    for (let i = 0; i < L.drive; i++)
       pushInst(boxIM, driveCounter.position.x, 1.06 + 0.065 + BOX_H * (i % 10), Z(DRIVE_COUNTER.y + 22) + Math.floor(i / 10) * 0.72, Math.PI / 2);
   }
 
@@ -1237,7 +1413,7 @@ function syncScene(dt) {
   for (const c of queue) animPerson(c, dt);
   for (const c of walkers) animPerson(c, dt);
   playerRing.position.set(X(player.x), 0.012, Z(player.y));
-  const cap = carryCap(S.up.cap);
+  const cap = carryCap(L.up.cap);
   if (player.stack >= cap) label('max', X(player.x), 1.75 + cap * BOX_H, Z(player.y), '<span class="tag">MAX</span>');
 
   // cars
@@ -1245,7 +1421,7 @@ function syncScene(dt) {
 
   // cash piles
   for (const k in PILES) {
-    const amt = S.piles[k]; if (amt <= 0) continue;
+    const amt = L.piles[k]; if (amt <= 0) continue;
     const p = PILES[k], n = Math.min(30, 1 + Math.floor(amt / 8));
     for (let i = 0; i < n; i++) {
       const col = i % 3, row = Math.floor(i / 3);
@@ -1258,7 +1434,7 @@ function syncScene(dt) {
   for (const d of visibleZones()) {
     const ob = objFor(d, makeZoneObj);
     drawZone(ob, d);
-    const s = S.money >= d.cost - (S.paid[d.id] || 0) ? 1 + Math.sin(time * 6) * 0.04 : 1;
+    const s = S.money >= zoneCost(d) - (L.paid[d.id] || 0) ? 1 + Math.sin(time * 6) * 0.04 : 1;
     ob.root.scale.set(s, s, 1);
   }
 
@@ -1268,7 +1444,7 @@ function syncScene(dt) {
     label('bub' + f.id, X(f.x), 2.35, Z(f.y), `<div class="bubble">🍕 ${f.got}/${f.order}</div>`);
   const fc = carQueue[0];
   if (fc && fc.y === CAR_Y) label('car' + fc.id, X(fc.x), 2.1, Z(fc.y), `<div class="bubble">🍕 ${fc.got}/${fc.order}</div>`);
-  if (f && f.y === QUEUE_Y && !cashierPresent() && S.counter > 0) label('alert', X(CASHIER.x), 1.4, Z(CASHIER.y), '<div class="alert">!</div>');
+  if (f && f.y === QUEUE_Y && !cashierPresent() && L.counter > 0) label('alert', X(CASHIER.x), 1.4, Z(CASHIER.y), '<div class="alert">!</div>');
 
   const gt = guideTarget();
   arrow.visible = !!gt && dist(player, gt) > 40;
@@ -1304,11 +1480,11 @@ function syncScene(dt) {
 }
 
 function guideTarget() {
-  if (S.unlocked.carrier1) return null;
+  if (L.unlocked.carrier1) return null;
   if (player.stack > 0) return DROP;
-  if (queue[0] && S.counter > 0) return CASHIER;
-  if (S.piles.main > 0) return PILES.main;
-  const z = visibleZones().find(d => S.money >= d.cost - (S.paid[d.id] || 0));
+  if (queue[0] && L.counter > 0) return CASHIER;
+  if (L.piles.main > 0) return PILES.main;
+  const z = visibleZones().find(d => S.money >= zoneCost(d) - (L.paid[d.id] || 0));
   if (z) return z;
   return pickPt(ovens.reduce((b, o) => o.stock > b.stock ? o : b, ovens[0]));
 }
@@ -1330,12 +1506,12 @@ upList.addEventListener('click', e => { const id = e.target.closest('button')?.d
 function buyUpgrade(id) {
   const u = UPGRADES.find(x => x.id === id);
   if (!canBuy(u)) return;
-  S.money -= upCost(u); S.up[id]++;
+  S.money -= upCost(u); L.up[id]++;
   sfx.up(); refreshPanel(); save();
 }
 function refreshPanel() {
   for (const u of UPGRADES) {
-    const row = upList.querySelector(`.row[data-id="${u.id}"]`), l = S.up[u.id];
+    const row = upList.querySelector(`.row[data-id="${u.id}"]`), l = L.up[u.id];
     row.querySelector('.nm').textContent = u.name;
     row.querySelector('.ds').textContent = l >= u.max ? u.desc(l) : `${u.desc(l)}  →  ${u.next(l)}`;
     const pips = row.querySelector('.pips');
@@ -1349,8 +1525,38 @@ function refreshPanel() {
 }
 function togglePanel(open = panel.hidden) {
   panel.hidden = !open;
-  if (open) refreshPanel();
+  if (open) { shopsPanel.hidden = true; refreshPanel(); }
 }
+
+const shopsPanel = document.getElementById('shops'), shopList = document.getElementById('shopList');
+function refreshShops() {
+  const html = LOCATIONS.map((lc, i) => {
+    const owned = i < S.shops.length, next = i === S.shops.length, known = owned || next;
+    let info, btn = '<button disabled>Locked</button>';
+    if (owned) {
+      const sh = S.shops[i], done = UNLOCKS.filter(d => sh.unlocked[d.id]).length;
+      info = `${done}/${UNLOCKS.length} unlocked · ` + (i === S.cur ? 'you are here' : `earning $${fmt(idleRateFor(sh, i))}/s`);
+      btn = i === S.cur ? '<button disabled>Here</button>' : `<button data-shop="${i}">Go</button>`;
+    } else if (next) {
+      info = `Unlock everything in ${LOCATIONS[i - 1].name}, then pay $${fmt(NEXT_SHOP_COST * lc.costMult)}`;
+    } else info = 'Open more shops to find out';
+    return `<div class="row"><div class="ic">${known ? lc.icon : '❔'}</div>
+      <div class="tx"><div class="nm">${known ? lc.name : '???'}</div><div class="ds">${info}</div>
+      ${known ? `<div class="ds">Pizza prices ×${lc.priceMult}</div>` : ''}</div>${btn}</div>`;
+  }).join('');
+  if (shopList._html !== html) { shopList.innerHTML = html; shopList._html = html; }
+}
+shopList.addEventListener('click', e => {
+  const i = e.target.closest('button')?.dataset.shop;
+  if (i !== undefined) { toggleShops(false); goToShop(+i); }
+});
+function toggleShops(open = shopsPanel.hidden) {
+  shopsPanel.hidden = !open;
+  if (open) { panel.hidden = true; refreshShops(); }
+}
+document.getElementById('shopsBtn').onclick = () => { initAudio(); toggleShops(); };
+document.getElementById('shopsClose').onclick = () => toggleShops(false);
+shopsPanel.addEventListener('pointerdown', e => { if (e.target === shopsPanel) toggleShops(false); });
 function toggleSound() { S.sound = !S.sound; soundBtn.textContent = S.sound ? '🔊' : '🔇'; save(); }
 upBtn.onclick = () => { initAudio(); togglePanel(); };
 soundBtn.onclick = () => { initAudio(); toggleSound(); };
@@ -1364,12 +1570,20 @@ document.getElementById('resetBtn').onclick = () => {
 soundBtn.textContent = S.sound ? '🔊' : '🔇';
 
 let panelT = 0;
+const shopTag = document.getElementById('shopTag');
 function hud(dt) {
   const m = Math.floor(S.money);
   if (m !== shownMoney) { moneyEl.textContent = fmt(m); shownMoney = m; }
+  const bg = otherShopsRate();
+  const tag = S.shops.length > 1 ? `${loc().icon} ${loc().name}` + (bg > 0 ? ` · +$${fmt(bg)}/s from other shops` : '') : '';
+  if (shopTag.textContent !== tag) shopTag.textContent = tag;
   upBtn.classList.toggle('glow', UPGRADES.some(canBuy));
   panelT -= dt;
-  if (!panel.hidden && panelT <= 0) { panelT = 0.25; refreshPanel(); }
+  if (panelT <= 0) {
+    panelT = 0.25;
+    if (!panel.hidden) refreshPanel();
+    if (!shopsPanel.hidden) refreshShops();
+  }
 }
 
 // ================= main loop =================
@@ -1403,7 +1617,7 @@ addEventListener('pagehide', save);
 document.addEventListener('visibilitychange', () => { if (document.hidden) save(); });
 
 // Test hook for automated checks.
-window.__game = { get S() { return S; }, player, queue, walkers, ovens, tables, workers, carQueue, update,
+window.__game = { get S() { return S; }, get L() { return L; }, goToShop, buyUpgrade, UPGRADES, zoneCost, visibleZones, player, queue, walkers, ovens, tables, workers, carQueue, update,
   renderFrame, idleRate, unlock, UNLOCKS, cam, renderer };
 </script>
 </body>
