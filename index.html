@@ -89,6 +89,9 @@
     padding:10px 18px;border-radius:16px;font-weight:800;font-size:15px;opacity:0;transition:.3s;pointer-events:none;
     text-align:center;max-width:80vw;box-shadow:0 4px 0 #d9c3a0,0 8px 20px rgba(0,0,0,.2)}
   #toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+  .manager-control{display:flex;align-items:center;flex-wrap:wrap;gap:6px;margin-top:9px;font-size:13px;font-weight:700}
+  #autoReserve{font:inherit;width:120px;max-width:100%;padding:5px;border:1px solid #d9c3a0;border-radius:8px;color:#4a3112}
+  #autoEnabled{accent-color:#1d9a57}
   /* Mini window: keep only the essentials. */
   @media (max-width: 600px) {
     #help, .btxt, kbd, #zoomBtn{display:none}
@@ -125,6 +128,15 @@
   <div class="card">
     <h2>Upgrades</h2>
     <div id="upList"></div>
+    <div class="row" id="managerBox">
+      <div class="ic">💼</div><div class="tx">
+        <div class="nm">Manager auto-upgrades</div>
+        <div class="ds">Buys the cheapest equipment upgrade every 3 seconds. No unlocks, recipe upgrades, or offline spending.</div>
+        <label class="manager-control"><input id="autoEnabled" type="checkbox"> Enable in this shop</label>
+        <label class="manager-control" for="autoReserve">Keep at least $ <input id="autoReserve" type="number" min="0" step="100" inputmode="numeric"></label>
+        <div id="autoStatus" class="ds" aria-live="polite"></div>
+      </div>
+    </div>
     <div class="foot">
       <button id="resetBtn">Reset progress</button>
       <button id="closeBtn">Close<kbd>Esc</kbd></button>
@@ -176,7 +188,7 @@ function fmtDur(s) {
 // ================= layout (game logic uses a 1200x800 top-down plane) =================
 const ROOM = { x: 90, y: 40, w: 1100, h: 730 };
 const COUNTER = { x: 540, y: 305, w: 260, h: 48 };
-const DROP = P(600, 268), CASHIER = P(740, 268), TRASH = P(495, 330);
+const DROP = P(600, 268), CASHIER = P(740, 268), SALES_CASHIER = P(660, 268), TRASH = P(495, 330);
 const DRIVE_COUNTER = { x: 92, y: 480, w: 46, h: 170 };
 const DRIVE_DROP = P(172, 512), DRIVE_CASHIER = P(172, 618);
 const QUEUE_X = 740, QUEUE_Y = 398, QUEUE_GAP = 44, MAX_QUEUE = 8;
@@ -222,9 +234,11 @@ const UNLOCKS = [
   { id: 'table1',   cost: 20,    req: null,       x: 980,  y: 170, icon: '🪑', name: 'Table' },
   { id: 'oven2',    cost: 50,    req: 'table1',   x: 300,  y: 95,  icon: '🔥', name: 'Oven' },
   { id: 'cashier',  cost: 100,   req: 'oven2',    x: 740,  y: 185, icon: '💁', name: 'Cashier' },
+  { id: 'salesclerk', cost: 700, req: 'cashier',  x: 780,  y: 185, icon: '💁', name: 'Sales Clerk', optional: true },
   { id: 'table2',   cost: 160,   req: 'cashier',  x: 1110, y: 170, icon: '🪑', name: 'Table' },
   { id: 'carrier1', cost: 250,   req: 'cashier',  x: 470,  y: 260, icon: '🧑‍🍳', name: 'Baker' },
   { id: 'soda',     cost: 450,   req: 'carrier1', x: 125,  y: 410, icon: '🥤', name: 'Soda' },
+  { id: 'restocker', cost: 1500, req: 'soda',     x: 410,  y: 330, icon: '📦', name: 'Restocking Assistant', optional: true },
   { id: 'table3',   cost: 380,   req: 'table2',   x: 980,  y: 370, icon: '🪑', name: 'Table' },
   { id: 'oven3',    cost: 560,   req: 'carrier1', x: 430,  y: 95,  icon: '🔥', name: 'Oven' },
   { id: 'cleaner',  cost: 800,   req: 'table3',   x: 1045, y: 700, icon: '🧹', name: 'Cleaner' },
@@ -252,22 +266,27 @@ const NEXT_SHOP_COST = 8000;
 // Each location is the same floor plan with a new look and bigger numbers.
 const LOCATIONS = [
   { name: 'Corner Pizzeria', icon: '🧱', priceMult: 1,  costMult: 1,   orderMax: 3, carMult: 1,
+    special: { title: 'Family dining', desc: 'Groups share a table. Upgrade tables for parties of 3–4.' },
     theme: { sky: '#bfe3f2', ground: ['#86cf5e', '60,140,50', '170,230,120'], floor: { kind: 'wood', h: 30, s: 42, l: 66 },
       tile: ['#fbf4e8', '#e8dac4'], wallKind: 'brick', wallHue: 10, wall: '#e7835f', trim: '#fff1dc',
       leaf: '#4fb35a', leaf2: '#62c46a', trunk: '#8a5a3b', cloth: ['#e8473b', '#fff7ef'] } },
   { name: 'Beach Shack', icon: '🏖️', priceMult: 3, costMult: 5, orderMax: 4, carMult: 1,
+    special: { title: 'Ice-cream specials', desc: '75% of customers order ice cream when unlocked. Tables have beach parasols.', creamChance: 0.75, parasols: true },
     theme: { sky: '#a6e4f7', ground: ['#f1d796', '200,160,90', '255,240,200'], floor: { kind: 'wood', h: 38, s: 30, l: 76 },
       tile: ['#f2fbfa', '#bfe9e4'], wallKind: 'planks', wallColor: '#4fc1bb', wall: '#5fd0c4', trim: '#fffaf0',
       leaf: '#33b56a', leaf2: '#4cd082', trunk: '#b08050', cloth: ['#2fb3e0', '#fffaf0'] } },
   { name: 'City Diner', icon: '🏙️', priceMult: 9, costMult: 25, orderMax: 4, carMult: 1.6,
+    special: { title: 'Office lunch rush', desc: '30-second lunch rush after every 2 minutes of normal service.', rushEvery: 120, rushDuration: 30 },
     theme: { sky: '#c9d6e3', ground: ['#a7adb5', '80,85,95', '200,205,210'], floor: { kind: 'checker', a: '#f4f4f2', b: '#2e3440' },
       tile: ['#ffffff', '#f2b8b8'], wallKind: 'tiles', wallColor: '#3c6fd1', wall: '#4d7fe0', trim: '#f4f4f2',
       leaf: '#3f9e5a', leaf2: '#56b46e', trunk: '#6b5040', cloth: ['#3c6fd1', '#ffffff'] } },
   { name: 'Ski Lodge', icon: '🏔️', priceMult: 27, costMult: 125, orderMax: 5, carMult: 1.2,
+    special: { title: 'Hot chocolate', desc: 'Serve hot chocolate instead of soda, using the same drink station.', drinkName: 'Hot Chocolate', drinkIcon: '☕' },
     theme: { sky: '#dce9f5', ground: ['#f3f7fb', '190,205,220', '255,255,255'], floor: { kind: 'wood', h: 24, s: 45, l: 45 },
       tile: ['#f3ece0', '#dccdb5'], wallKind: 'logs', wallColor: '#8a5a3b', wall: '#9b6a45', trim: '#f3ece0',
       leaf: '#2f7d4f', leaf2: '#3d9461', trunk: '#6b4630', cloth: ['#2f7d4f', '#f3ece0'] } },
   { name: 'Moon Base', icon: '🚀', priceMult: 81, costMult: 625, orderMax: 5, carMult: 2,
+    special: { title: 'Robot crew', desc: 'Robot staff move 25% faster, including while you are away.', staffMult: 1.25 },
     theme: { sky: '#161a33', ground: ['#8d8f99', '60,62,72', '180,182,190'], floor: { kind: 'metal' },
       tile: ['#e3e6ec', '#c5cad3'], wallKind: 'panels', wallColor: '#5b6378', wall: '#6c7590', trim: '#d6dbe6',
       leaf: '#7a7f8c', leaf2: '#9a9fac', trunk: '#5b5f6b', cloth: ['#7a5cff', '#e3e6ec'] } },
@@ -292,7 +311,8 @@ const UPGRADES = [
     desc: l => `Bake ${ovenTime(l).toFixed(1)}s, hold ${ovenMax(l)}`,
     next: l => `${ovenTime(l + 1).toFixed(1)}s, ${ovenMax(l + 1)}` },
   { id: 'price', icon: '🍕', name: 'Better Recipe', max: 10, base: 60, mult: 1.7,
-    desc: l => `Pizza sells for $${pizzaPrice(l)}`, next: l => `$${pizzaPrice(l + 1)}` },
+    desc: l => `Pizza sells for $${Number(itemPrice('pizza', l).toFixed(2))}`,
+    next: l => `$${Number(itemPrice('pizza', l + 1).toFixed(2))}` },
   { id: 'cust', icon: '📣', name: 'Word of Mouth', max: 8, base: 120, mult: 1.8,
     desc: l => `Customer every ${spawnTimeFor(l).toFixed(1)}s`, next: l => `${spawnTimeFor(l + 1).toFixed(1)}s` },
   { id: 'staff', icon: '🎓', name: 'Staff Training', max: 6, base: 250, mult: 1.9, req: 'cashier',
@@ -309,7 +329,7 @@ const newShop = () => ({
   unlocked: { oven1: true }, paid: {},
   up: { speed: 0, cap: 0, oven: 0, price: 0, cust: 0, staff: 0 },
   counter: 0, drive: 0, soda: 0, cream: 0, dsoda: 0, dcream: 0, piles: { main: 0, drive: 0 },
-  rating: 3, goal: null, goalsDone: 0, lv: {},
+  rating: 3, goal: null, goalsDone: 0, lv: {}, auto: { enabled: false, reserve: 5000 },
 });
 function freshState() {
   return { money: 0, earned: 0, runEarned: 0, stars: 0, sound: true, zoom: 1.2, t: 0, cur: 0, shops: [newShop()] };
@@ -322,6 +342,8 @@ function fixShop(d) {
   sh.counter = d.counter | 0; sh.drive = d.drive | 0; sh.soda = d.soda | 0; sh.cream = d.cream | 0;
   sh.dsoda = d.dsoda | 0; sh.dcream = d.dcream | 0;
   sh.rating = clamp(d.rating ?? 3, 1, 5); sh.goal = d.goal || null; sh.goalsDone = d.goalsDone | 0; sh.lv = { ...d.lv };
+  sh.auto.enabled = d.auto?.enabled === true;
+  if (Number.isSafeInteger(d.auto?.reserve) && d.auto.reserve >= 0) sh.auto.reserve = d.auto.reserve;
   return sh;
 }
 function loadState() {
@@ -342,6 +364,9 @@ function loadState() {
 }
 let S = loadState(), L = S.shops[S.cur];
 const loc = () => LOCATIONS[S.cur];
+const itemInfo = t => t === 'soda' && loc().special.drinkName
+  ? { ...ITEMS[t], name: loc().special.drinkName, icon: loc().special.drinkIcon } : ITEMS[t];
+const rushDelay = () => loc().special.rushEvery || rand(240, 420);
 // Each prestige star adds 10% to all prices.
 const starMult = () => 1 + 0.1 * S.stars;
 function save() {
@@ -359,8 +384,9 @@ const player = {
 };
 const ovens = [], stations = [], tables = [], workers = [], queue = [], walkers = [], carQueue = [], carsOut = [];
 const zoneStand = {};
-let spawnT = 1.5, carT = 4, serveT = 0, driveServeT = 0;
-let rushT = rand(240, 420), rushLeft = 0, vipT = rand(150, 260), vipPending = false;
+let spawnT = 1.5, carT = 4, driveServeT = 0;
+const serveTimers = [0, 0];
+let rushT = rushDelay(), rushLeft = 0, vipT = rand(150, 260), vipPending = false;
 
 const SHIRTS = ['#ef5b5b', '#4a9df8', '#38c979', '#a66cf0', '#f7c83c', '#f78a3c', '#2ec4b6', '#ff7eb6', '#4f5d75'];
 const SKINS = ['#f6d2b8', '#e8b48a', '#c98d5e', '#8d5a3b', '#ffe0c4'];
@@ -369,6 +395,8 @@ const PANTS = ['#3b3f58', '#2f4b7c', '#6d4c41', '#46505a', '#1f6f78'];
 const CAR_COLORS = ['#ef5b5b', '#4a9df8', '#f7a531', '#a66cf0', '#2ec4b6', '#f3f0ea', '#3a4255'];
 const WORKER_LOOK = {
   cashier: { shirt: '#4a9df8', hat: 'cap', hatColor: '#1f6fd1', pants: '#3b3f58' },
+  salesclerk: { shirt: '#2ec4b6', hat: 'cap', hatColor: '#138d82', pants: '#3b3f58' },
+  restocker: { shirt: '#f7c83c', hat: 'cap', hatColor: '#d99a0b', pants: '#3b3f58' },
   carrier: { shirt: '#f78a3c', hat: 'chef', pants: '#3b3f58' },
   cleaner: { shirt: '#38c979', hat: 'cap', hatColor: '#1f9a58', pants: '#2f4b7c' },
   driver:  { shirt: '#a66cf0', hat: 'cap', hatColor: '#6c3fc4', pants: '#3b3f58' },
@@ -381,8 +409,8 @@ function makeWorker(id) {
   return {
     id: nextId++, key: id, type, x: DOOR_X, y: 760, dir: -Math.PI / 2, moving: false, items: [], actT: 0,
     state: 'fetch', src: null, dest: 'counter', table: null,
-    off: { carrier2: 24, carrier3: -24, barista: 46 }[id] || 0, seed: Math.random() * 10,
-    skin: pick(SKINS), hair: pick(HAIRS), ...WORKER_LOOK[type],
+    off: { carrier2: 24, carrier3: -24, barista: 46, restocker: -46 }[id] || 0, seed: Math.random() * 10,
+    skin: pick(SKINS), hair: pick(HAIRS), ...WORKER_LOOK[type], robot: !!loc().special.staffMult,
   };
 }
 function syncWorld() {
@@ -394,7 +422,7 @@ function syncWorld() {
   for (const id in TABLE_POS)
     if (L.unlocked[id] && !tables.some(t => t.id === id))
       tables.push({ id, ...TABLE_POS[id], seats: SEATS.map(() => ({ occupant: null, dirty: false, tip: 0 })), dirty: false, clean: 0 });
-  for (const id of ['cashier', ...CARRIERS, 'cleaner', 'driver', 'barista', 'manager'])
+  for (const id of ['cashier', 'salesclerk', ...CARRIERS, 'restocker', 'cleaner', 'driver', 'barista', 'manager'])
     if (L.unlocked[id] && !workers.some(w => w.key === id)) workers.push(makeWorker(id));
 }
 syncWorld();
@@ -410,6 +438,7 @@ const EQUIP = {
 };
 const EQUIP_MAX = 5;
 const equipKind = id => id.startsWith('oven') ? 'oven' : id.startsWith('table') ? 'table' : id;
+const equipInfo = id => id === 'soda' && loc().special.drinkName ? { ...EQUIP.soda, ...itemInfo('soda') } : EQUIP[equipKind(id)];
 const lvOf = (id, sh = L) => sh.lv[id] || 1;
 const equipCost = id => Math.round(EQUIP[equipKind(id)].base * Math.pow(2.5, lvOf(id) - 1) * loc().costMult);
 // Work time multiplier: Lv 5 takes 40% of the Lv 1 time.
@@ -436,23 +465,38 @@ function nearestEquip() {
   for (const e of equipment()) { const d = rectDist(player, e.r); if (d < bd) { bd = d; best = e; } }
   return best;
 }
-function upgradeEquip(id) {
-  const lv = lvOf(id), cost = equipCost(id), k = EQUIP[equipKind(id)];
-  if (lv >= EQUIP_MAX || S.money < cost) return;
+function upgradeEquip(id, automatic = false) {
+  const e = equipment().find(e => e.id === id);
+  if (!e) return false;
+  const lv = lvOf(id), cost = equipCost(id), k = equipInfo(id);
+  if (lv >= EQUIP_MAX || S.money < cost) return false;
+  if (automatic && (!L.unlocked.manager || !L.auto.enabled || S.money - cost < L.auto.reserve)) return false;
   S.money -= cost; L.lv[id] = lv + 1;
   equipBorn[id] = time;
-  const e = equipment().find(e => e.id === id);
-  if (e) confetti(e.x, e.y);
-  sfx.up();
-  toast(`${k.icon} ${k.name} upgraded to Lv ${lv + 1}!`);
+  if (automatic) addFloat(e.x, e.y, `💼 ${k.icon} Lv ${lv + 1}`, 'gold');
+  else { confetti(e.x, e.y); sfx.up(); toast(`${k.icon} ${k.name} upgraded to Lv ${lv + 1}!`); }
   save();
+  return true;
+}
+function setAutoSettings(enabled, reserve) {
+  if (!Number.isSafeInteger(reserve) || reserve < 0 || (enabled && !L.unlocked.manager)) return false;
+  L.auto.enabled = enabled; L.auto.reserve = reserve;
+  save();
+  return true;
+}
+function autoUpgradeEquipment() {
+  if (!L.unlocked.manager || !L.auto.enabled) return false;
+  const available = S.money - L.auto.reserve;
+  const candidate = equipment().filter(e => lvOf(e.id) < EQUIP_MAX && equipCost(e.id) <= available)
+    .sort((a, b) => equipCost(a.id) - equipCost(b.id))[0];
+  return candidate ? upgradeEquip(candidate.id, true) : false;
 }
 
 const pickPt = o => o.pick;
 const producers = () => [...ovens, ...stations];
 const bakeTime = o => (STATIONS[o.type]?.bake ?? 3) * Math.pow(0.86, L.up.oven) * speedUp(o.id);
 const stockMax = o => (STATIONS[o.type]?.max ?? 6) + L.up.oven + 2 * (lvOf(o.id) - 1);
-const itemPrice = t => ITEMS[t].base * (1 + 1.2 * L.up.price) * loc().priceMult * starMult();
+const itemPrice = (t, level = L.up.price) => ITEMS[t].base * (1 + 1.2 * level) * loc().priceMult * starMult();
 const price = () => itemPrice('pizza');
 const stockOf = t => L[STOCK_KEY[t]];
 const driveStock = t => L[DRIVE_KEY[t]];
@@ -480,7 +524,7 @@ const zoneCost = d => d.fixed || d.cost * loc().costMult;
 function visibleZones() {
   const z = UNLOCKS.filter(d => !L.unlocked[d.id] && (!d.req || L.unlocked[d.req]));
   const next = S.shops.length;
-  if (!z.length && S.cur === next - 1 && next < LOCATIONS.length) {
+  if (!UNLOCKS.some(d => !d.optional && !L.unlocked[d.id]) && S.cur === next - 1 && next < LOCATIONS.length) {
     const nl = LOCATIONS[next];
     Object.assign(NEW_SHOP, { fixed: NEXT_SHOP_COST * nl.costMult, name: nl.name, icon: nl.icon });
     z.push(NEW_SHOP);
@@ -489,6 +533,8 @@ function visibleZones() {
 }
 const workerAt = (type, pt) => workers.some(w => w.type === type && dist(w, pt) < 6);
 const cashierPresent = () => dist(player, CASHIER) < 42 || workerAt('cashier', CASHIER);
+const servicePoint = lane => lane === 0 ? CASHIER : SALES_CASHIER;
+const clerkPresent = lane => lane === 0 ? cashierPresent() : dist(player, SALES_CASHIER) < 32 || workerAt('salesclerk', SALES_CASHIER);
 const drivePresent = () => L.unlocked.drive && (dist(player, DRIVE_CASHIER) < 42 || workerAt('driver', DRIVE_CASHIER));
 
 function obstacles() {
@@ -517,6 +563,7 @@ const pointer = { down: false, sx: 0, sy: 0, x: 0, y: 0 };
 const GAME_KEYS = ['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight',
   'Space', 'KeyU', 'KeyM', 'KeyL', 'KeyE', 'Escape', 'Minus', 'Equal'];
 addEventListener('keydown', e => {
+  if (e.target.closest?.('input, textarea, select')) return;
   if (GAME_KEYS.includes(e.code)) e.preventDefault();
   initAudio();
   if (e.code === 'Minus') zoomBy(1.15);
@@ -665,13 +712,17 @@ function updateProducers(dt) {
 }
 
 function updateWorkers(dt) {
-  const sp = staffSpeed(L.up.staff);
+  const sp = staffSpeed(L.up.staff) * (loc().special.staffMult || 1);
   for (const w of workers) {
     w.actT -= dt;
-    if (w.type === 'cashier') { if (moveTo(w, CASHIER.x, CASHIER.y, sp, dt)) w.dir = Math.PI / 2; }
+    if (w.type === 'cashier' || w.type === 'salesclerk') {
+      const p = w.type === 'cashier' ? CASHIER : SALES_CASHIER;
+      if (moveTo(w, p.x, p.y, sp, dt)) w.dir = Math.PI / 2;
+    }
     else if (w.type === 'driver') { if (moveTo(w, DRIVE_CASHIER.x, DRIVE_CASHIER.y, sp, dt)) w.dir = Math.PI; }
     else if (w.type === 'carrier') updateCarrier(w, sp, dt, ovens);
     else if (w.type === 'barista') updateCarrier(w, sp, dt, stations);
+    else if (w.type === 'restocker') updateCarrier(w, sp, dt, producers());
     else if (w.type === 'cleaner') updateCleaner(w, sp, dt);
     else if (w.type === 'manager') updateManager(w, sp, dt);
   }
@@ -682,7 +733,9 @@ function updateCarrier(w, sp, dt, sources) {
   const cap = staffCap(L.up.staff);
   const ready = sources.filter(o => o.stock > 0);
   const need = o => Math.max(roomFor(o.type, 'counter') / counterCap(o.type),
-    L.unlocked.drive ? roomFor(o.type, 'drive') / driveCap(o.type) : 0);
+    L.unlocked.drive ? roomFor(o.type, 'drive') / driveCap(o.type) : 0) +
+    (w.type === 'restocker' && (queue.some(c => c.lane !== undefined && c.got[o.type] < c.order[o.type] && stockOf(o.type) === 0) ||
+      (carQueue[0] && carQueue[0].got[o.type] < carQueue[0].order[o.type] && driveStock(o.type) === 0)) ? 2 : 0);
   if (w.state === 'fetch') {
     if (w.items.length >= cap || (w.items.length && !ready.length)) {
       w.state = 'deliver';
@@ -724,6 +777,7 @@ function updateManager(w, sp, dt) {
     earn(amt, w.x, w.y);
     addCoins(PILES[k].x, PILES[k].y - 10, w, Math.min(8, 2 + Math.floor(amt / 40)));
   }
+  autoUpgradeEquipment();
 }
 
 function updateCleaner(w, sp, dt) {
@@ -740,81 +794,123 @@ function updateCleaner(w, sp, dt) {
 function makeOrder(vip) {
   const o = { pizza: randi(1, loc().orderMax) + (vip ? 3 : 0), soda: 0, cream: 0 };
   if (L.unlocked.soda && Math.random() < 0.6) o.soda = randi(1, 2) + (vip ? 1 : 0);
-  if (L.unlocked.cream && Math.random() < 0.45) o.cream = 1 + (vip ? 1 : 0);
+  if (L.unlocked.cream && Math.random() < (loc().special.creamChance || 0.45)) o.cream = 1 + (vip ? 1 : 0);
   return o;
 }
 const orderSize = o => o.pizza + o.soda + o.cream;
 const orderLeft = c => ITEM_TYPES.some(t => c.got[t] < c.order[t]);
 
-function spawnCustomer() {
-  const vip = vipPending;
-  vipPending = false;
-  queue.push({
+const partySize = c => 1 + (c.guests?.length || 0);
+const queueSize = () => queue.reduce((n, c) => n + partySize(c), 0);
+function newCustomer(vip = false) {
+  return {
     id: nextId++, x: SPAWN.x + rand(-8, 8), y: SPAWN.y, dir: -Math.PI / 2, moving: true,
     order: makeOrder(vip), got: { pizza: 0, soda: 0, cream: 0 }, items: [], vip,
     patience: vip ? VIP_PATIENCE : PATIENCE, dine: Math.random() < 0.65,
     state: 'queue', path: [], next: null, table: null, timer: 0, seed: Math.random() * 10,
     shirt: vip ? '#f5c242' : pick(SHIRTS), skin: pick(SKINS), hair: pick(HAIRS), pants: pick(PANTS), hairStyle: randi(0, 2),
-  });
+  };
+}
+function spawnCustomer(size) {
+  const room = MAX_QUEUE - queueSize();
+  if (room <= 0) return null;
+  const vip = vipPending;
+  vipPending = false;
+  const maxGroup = Math.max(1, ...tables.map(seatCount));
+  size = vip ? 1 : Math.min(room, size ?? (maxGroup > 1 && Math.random() < 0.28 ? randi(2, maxGroup) : 1));
+  const c = newCustomer(vip);
+  c.guests = Array.from({ length: size - 1 }, () => newCustomer());
+  if (c.guests.length) {
+    c.dine = true; c.personalOrder = { ...c.order };
+    for (const guest of c.guests) for (const t of ITEM_TYPES) c.order[t] += guest.order[t];
+    c.patience += 15 * c.guests.length;
+  }
+  queue.push(c);
+  return c;
 }
 
 function finishOrder(c) {
-  queue.shift();
+  const index = queue.indexOf(c);
+  if (index < 0) return;
+  queue.splice(index, 1);
   const pay = Math.round(ITEM_TYPES.reduce((a, t) => a + c.order[t] * itemPrice(t), 0) * (c.vip ? 3 : 1));
   L.piles.main += pay;
-  addFloat(QUEUE_X, QUEUE_Y, (c.vip ? '👑 $' : '$') + fmt(pay), 'gold');
+  addFloat(c.x, QUEUE_Y, (c.vip ? '👑 $' : '$') + fmt(pay), 'gold');
   L.rating = Math.min(5, L.rating + (c.vip ? 0.15 : 0.03));
-  goalProgress('serve', 1);
-  c.items = ITEM_TYPES.flatMap(t => Array(c.order[t]).fill(t));
-  c.state = 'walk';
-  let t = null, si = -1;
-  if (c.dine) for (const tb of tables) {
-    si = tb.seats.findIndex((s, i) => i < seatCount(tb) && !s.occupant && !s.dirty);
-    if (si >= 0) { t = tb; break; }
-  }
-  if (t) {
-    const st = SEATS[si], row = t.y + (st.dy > 0 ? 80 : -80);
-    t.seats[si].occupant = c; c.table = t; c.seat = si; c.next = 'eat';
-    // Walk along the row just outside the chairs so customers do not cross other tables.
-    c.path = [P(t.aisle, QUEUE_Y), P(t.aisle, row), P(t.x + st.dx, row), P(t.x + st.dx, t.y + st.dy)];
-  } else {
-    c.next = 'gone';
-    c.path = [P(LEAVE_X, QUEUE_Y + 10), P(LEAVE_X, 860)];
-  }
-  walkers.push(c);
+  const diners = [c, ...(c.guests || [])];
+  goalProgress('serve', diners.length);
+  // Reserve all seats together. A group never splits across tables or waits for seats.
+  const freeSeats = t => t.seats.flatMap((s, i) => i < seatCount(t) && !s.occupant && !s.dirty ? [i] : []);
+  const table = c.dine ? tables.find(t => !t.dirty && freeSeats(t).length >= diners.length) : null;
+  const seats = table ? freeSeats(table) : [];
+  if (c.personalOrder) c.order = c.personalOrder;
+  c.guests = [];
+  diners.forEach((diner, i) => {
+    diner.items = ITEM_TYPES.flatMap(t => Array(diner.order[t]).fill(t));
+    diner.state = 'walk';
+    if (table) {
+      const si = seats[i], st = SEATS[si], row = table.y + (st.dy > 0 ? 80 : -80);
+      table.seats[si].occupant = diner; diner.table = table; diner.seat = si; diner.next = 'eat';
+      diner.path = [P(table.aisle, QUEUE_Y), P(table.aisle, row), P(table.x + st.dx, row), P(table.x + st.dx, table.y + st.dy)];
+    } else {
+      diner.next = 'gone';
+      diner.path = [P(LEAVE_X + i * 15, QUEUE_Y + 10), P(LEAVE_X + i * 15, 860)];
+    }
+    walkers.push(diner);
+  });
 }
 
 function leaveAngry(c, i) {
   queue.splice(i, 1);
   for (const t of ITEM_TYPES) L[STOCK_KEY[t]] = Math.min(counterCap(t), stockOf(t) + c.got[t]);
   L.rating = Math.max(1, L.rating - 0.2);
-  c.angry = true; c.state = 'walk'; c.next = 'gone';
-  c.path = [P(LEAVE_X, c.y + 10), P(LEAVE_X, 860)];
+  const diners = [c, ...(c.guests || [])];
+  c.guests = [];
+  for (const diner of diners) {
+    diner.angry = true; diner.state = 'walk'; diner.next = 'gone';
+    diner.path = [P(LEAVE_X, diner.y + 10), P(LEAVE_X, 860)];
+    walkers.push(diner);
+  }
   addFloat(c.x, c.y, '😡 left');
-  walkers.push(c);
 }
 
 function updateCustomers(dt) {
   spawnT -= dt;
   if (spawnT <= 0) {
-    spawnT = spawnTime() * rand(0.7, 1.3);
-    if (queue.length < MAX_QUEUE) spawnCustomer();
+    const c = spawnCustomer();
+    // Groups replace individual arrivals instead of increasing demand by 2–4×.
+    spawnT = spawnTime() * rand(0.7, 1.3) * (c ? partySize(c) : 1);
   }
-  queue.forEach((c, i) => moveTo(c, QUEUE_X, QUEUE_Y + i * QUEUE_GAP, 110, dt));
-  const canServe = c => c.x === QUEUE_X && c.y === QUEUE_Y && cashierPresent();
+  // Keep an order at its assigned register until it finishes, even if the other lane empties.
+  const laneCount = L.unlocked.salesclerk ? 2 : 1;
+  const occupied = new Set(queue.filter(c => c.lane !== undefined).map(c => c.lane));
+  for (const c of queue) if (c.lane === undefined) {
+    const lane = Array.from({ length: laneCount }, (_, i) => i).find(i => !occupied.has(i));
+    if (lane === undefined) break;
+    c.lane = lane; occupied.add(lane);
+  }
+  let row = QUEUE_Y + QUEUE_GAP + (queue.some(c => c.lane !== undefined && partySize(c) > 1) ? 52 : 0);
+  for (const c of queue) {
+    const serving = c.lane !== undefined;
+    moveTo(c, serving ? servicePoint(c.lane).x : QUEUE_X, serving ? QUEUE_Y : row, 110, dt);
+    (c.guests || []).forEach((guest, i) => {
+      moveTo(guest, c.x + (i % 2 ? 25 : -25), c.y + 24 + Math.floor(i / 2) * 26, 110, dt);
+    });
+    if (!serving) row += QUEUE_GAP + (partySize(c) > 1 ? 26 * Math.ceil((partySize(c) - 1) / 2) : 0);
+  }
+  const canServe = c => c.lane !== undefined && c.x === servicePoint(c.lane).x && c.y === QUEUE_Y && clerkPresent(c.lane);
   // Waiting customers lose patience, except while the front one is actively being served.
   for (let i = queue.length - 1; i >= 0; i--) {
     const c = queue[i];
-    const busy = i === 0 && canServe(c) && ITEM_TYPES.some(t => c.got[t] < c.order[t] && stockOf(t) > 0);
+    const busy = canServe(c) && ITEM_TYPES.some(t => c.got[t] < c.order[t] && stockOf(t) > 0);
     if (!busy) c.patience -= dt;
     if (c.patience <= 0) leaveAngry(c, i);
   }
-  const f = queue[0];
-  if (f && canServe(f)) {
-    serveT -= dt;
-    if (serveT <= 0) {
+  for (const f of queue.filter(canServe)) {
+    serveTimers[f.lane] -= dt;
+    if (serveTimers[f.lane] <= 0) {
       const t = ITEM_TYPES.find(t => f.got[t] < f.order[t] && stockOf(t) > 0);
-      if (t) { L[STOCK_KEY[t]]--; f.got[t]++; serveT = 0.22 * speedUp('counter'); }
+      if (t) { L[STOCK_KEY[t]]--; f.got[t]++; serveTimers[f.lane] = 0.22 * speedUp('counter'); }
     }
     if (!orderLeft(f)) finishOrder(f);
   }
@@ -844,8 +940,8 @@ function updateEvents(dt) {
     rushLeft -= dt;
     if (rushLeft <= 0) toast('Rush hour is over. Nice work!');
   } else if ((rushT -= dt) <= 0) {
-    rushT = rand(240, 420); rushLeft = 45; spawnT = 0;
-    toast('🔥 Rush hour! Lots of customers for 45 seconds', 4);
+    rushT = rushDelay(); rushLeft = loc().special.rushDuration || 45; spawnT = 0;
+    toast(`🔥 ${loc().special.rushEvery ? 'Office lunch rush' : 'Rush hour'}! Lots of customers for ${rushLeft} seconds`, 4);
   }
   if ((vipT -= dt) <= 0) {
     vipT = rand(150, 260); vipPending = true; spawnT = Math.min(spawnT, 0.5);
@@ -884,7 +980,7 @@ function makeCarOrder() {
   // Only once a barista can keep the drive-thru stocked; one car waiting on a drink blocks the lane.
   if (!L.unlocked.barista) return o;
   if (L.unlocked.soda && Math.random() < 0.6) o.soda = randi(1, 3);
-  if (L.unlocked.cream && Math.random() < 0.45) o.cream = randi(1, 2);
+  if (L.unlocked.cream && Math.random() < (loc().special.creamChance || 0.45)) o.cream = randi(1, 2);
   return o;
 }
 
@@ -942,7 +1038,9 @@ function unlock(d) {
   }
   L.unlocked[d.id] = true; delete L.paid[d.id];
   syncWorld(); confetti(d.x, d.y); sfx.unlock();
-  toast(`${d.icon} ${d.name} unlocked!`);
+  toast(d.id === 'salesclerk' ? '💁 Sales Clerk hired! Two orders can now be served at once.'
+    : d.id === 'restocker' ? '📦 Restocking Assistant hired! Carries all products and prioritizes missing order items.'
+    : `${d.icon} ${d.name} unlocked!`);
   save();
 }
 
@@ -951,7 +1049,8 @@ function goToShop(i) {
   S.cur = i; L = S.shops[i];
   for (const a of [ovens, stations, tables, workers, queue, walkers, carQueue, carsOut, fx]) a.length = 0;
   Object.assign(player, { x: 600, y: 210, items: [], dir: Math.PI / 2, moving: false });
-  spawnT = 1.5; carT = 4; rushLeft = 0; vipPending = false;
+  spawnT = 1.5; carT = 4; serveTimers.fill(0); driveServeT = 0;
+  rushLeft = 0; rushT = rushDelay(); vipT = rand(150, 260); vipPending = false;
   syncWorld();
   if (!L.goal) newGoal();
   resetScene();
@@ -982,9 +1081,10 @@ function idleRateFor(sh, li) {
   const tableLv = tableScore(sh, Object.keys(TABLE_POS).filter(id => u[id]));
   const prod = ovenIds.reduce((a, id) => a + 1 / (ovenTime(sh.up.oven) * (1 - 0.15 * (lvOf(id, sh) - 1))), 0);
   const drive = u.drive && u.driver ? 4.5 / carTimeOf(sh.up.cust, li) : 0;
-  const demand = (1 + lc.orderMax) / 2 / spawnTimeOf(sh.up.cust, nOvens, tableLv, sh.rating) + drive;
-  const haul = CARRIERS.filter(id => u[id]).length * staffCap(sh.up.staff) / 7;
-  const extras = 1 + (u.barista ? (u.soda ? 0.35 : 0) + (u.cream ? 0.3 : 0) : 0);
+  const rushDemand = lc.special.rushEvery ? 1 + 1.5 * lc.special.rushDuration / (lc.special.rushEvery + lc.special.rushDuration) : 1;
+  const demand = (1 + lc.orderMax) / 2 / spawnTimeOf(sh.up.cust, nOvens, tableLv, sh.rating) * rushDemand + drive;
+  const haul = (CARRIERS.filter(id => u[id]).length + (u.restocker ? 1 : 0)) * staffCap(sh.up.staff) / 7 * (lc.special.staffMult || 1);
+  const extras = 1 + (u.barista || u.restocker ? (u.soda ? 0.35 : 0) + (u.cream ? 0.3 * (lc.special.creamChance || 0.45) / 0.45 : 0) : 0);
   return Math.min(prod, demand, haul) * pizzaPrice(sh.up.price) * lc.priceMult * starMult() * extras * 0.5;
 }
 const idleRate = () => S.shops.reduce((a, sh, i) => a + idleRateFor(sh, i), 0);
@@ -1329,6 +1429,8 @@ function applyTheme(th) {
   paint(TEX.stripes, c => { for (let i = 0; i < 4; i++) { c.fillStyle = th.cloth[i % 2]; c.fillRect(i * 16, 0, 16, 64); } });
   wallMat.color.set(th.wall); trimMat.color.set(th.trim);
   leafMat.color.set(th.leaf); leafMat2.color.set(th.leaf2); trunkMat.color.set(th.trunk);
+  setLook(cupBodyMat, loc().special.drinkName ? '#7b4933' : '#e8473b');
+  setLook(cupTopMat, loc().special.drinkName ? '#633a27' : '#ffffff');
   paintSign(loc().name);
 }
 // Called after switching shops: entity meshes get rebuilt without the pop-in animation.
@@ -1361,7 +1463,7 @@ const bump = t0 => t0 === undefined ? 1 : 0.85 + 0.15 * Math.max(0.001, easeOutB
 
 // ---- counters ----
 const counterTopMat = ownMat('#f6e3c3'), counterMat = ownMat('#b8743f'), counterPanelMat = ownMat('#d18b4f');
-const counterGroup = new THREE.Group();
+const counterGroup = new THREE.Group(), salesRegister = new THREE.Group();
 let counterNeon, counterTrim;
 {
   const g = counterGroup; g.position.set(X(COUNTER.x + COUNTER.w / 2), 0, Z(COUNTER.y + COUNTER.h / 2));
@@ -1375,6 +1477,12 @@ let counterNeon, counterTrim;
   const scr = add(g, gBox(0.52, 0.34, 0.06, 0.02), '#3a3f4b', rx, 1.45, -0.12);
   scr.rotation.x = -0.35;
   add(scr, new THREE.PlaneGeometry(0.42, 0.24), new THREE.MeshBasicMaterial({ color: '#7ef0c8' }), 0, 0, 0.035, false);
+  salesRegister.position.x = X(SALES_CASHIER.x) - g.position.x;
+  add(salesRegister, gBox(0.62, 0.22, 0.48, 0.05), '#3a3f4b', 0, 1.17, 0.05);
+  const salesScreen = add(salesRegister, gBox(0.52, 0.34, 0.06, 0.02), '#3a3f4b', 0, 1.45, -0.12);
+  salesScreen.rotation.x = -0.35;
+  add(salesScreen, new THREE.PlaneGeometry(0.42, 0.24), BASIC('#7ef0c8'), 0, 0, 0.035, false);
+  g.add(salesRegister);
   scene.add(g);
 }
 const driveCounter = new THREE.Group();
@@ -1417,7 +1525,7 @@ function makeSodaObj() {
   for (const dz of [-0.2, 0.2]) add(root, gCyl(0.04, 0.04, 0.14, 8), '#c9ccd1', 0.68, 0.48, dz);
   add(root, gBox(0.62, 0.06, 1.3, 0.02), '#c9ccd1', 0.95, 0.42, 0);
   const sign = add(root, new THREE.PlaneGeometry(0.9, 0.42), decalMat(canvasTex(128, 64, (c, w, h) => {
-    c.textAlign = 'center'; c.textBaseline = 'middle'; c.font = `40px ${UI_FONT}`; c.fillText('🥤', w / 2, h / 2 + 2);
+    c.textAlign = 'center'; c.textBaseline = 'middle'; c.font = `40px ${UI_FONT}`; c.fillText(itemInfo('soda').icon, w / 2, h / 2 + 2);
   })), 0.7, 1.15, 0, false);
   sign.rotation.y = Math.PI / 2;
   return { root, bodyMat };
@@ -1466,12 +1574,15 @@ function makeTableObj() {
   add(candle, gCyl(0.08, 0.08, 0.03, 12), M('#f5c242', { metalness: 0.6, roughness: 0.3 }), 0, 0.015, 0);
   add(candle, gCyl(0.045, 0.045, 0.2, 10), '#fff8ec', 0, 0.13, 0);
   add(candle, gSph(0.04, 8, 6), BASIC('#ffc94a'), 0, 0.27, 0, false);
-  return { root, seats, cloth, chairMat, vase, candle };
+  const parasol = new THREE.Group(); parasol.position.x = 1.4; root.add(parasol);
+  add(parasol, gCyl(0.025, 0.025, 2.15, 8), '#fff5d9', 0, 1.075, 0);
+  add(parasol, gCyl(0, 0.9, 0.4, 8), new THREE.MeshStandardMaterial({ map: TEX.stripes, side: THREE.DoubleSide }), 0, 2.15, 0);
+  return { root, seats, cloth, chairMat, vase, candle, parasol };
 }
 
 function makePersonObj(e) {
   const root = new THREE.Group(), body = new THREE.Group(); root.add(body);
-  const shirt = M(e.shirt), skin = M(e.skin), pants = M(e.pants || '#3b3f58');
+  const shirt = M(e.shirt), skin = e.robot ? M('#c4d3df', { metalness: 0.65, roughness: 0.3 }) : M(e.skin), pants = M(e.pants || '#3b3f58');
   const leg = side => {
     const g = new THREE.Group(); g.position.set(side * 0.13, 0.5, 0); body.add(g);
     add(g, gCap(0.11, 0.26), pants, 0, -0.24, 0);
@@ -1489,10 +1600,10 @@ function makePersonObj(e) {
   const armL = arm(-1), armR = arm(1);
   // Tilt the head up a little so faces stay visible from the high camera.
   const head = new THREE.Group(); head.position.y = 1.47; head.rotation.x = -0.22; body.add(head);
-  add(head, gSph(0.31, 22, 16), skin, 0, 0, 0);
+  add(head, e.robot ? gBox(0.55, 0.5, 0.48, 0.07) : gSph(0.31, 22, 16), skin, 0, 0, 0);
   for (const s of [-1, 1]) {
-    add(head, gSph(0.052, 10, 8), '#2a2a2a', s * 0.11, 0.04, 0.27, false);
-    add(head, gSph(0.055, 8, 6), M('#ff9c8a', { transparent: true, opacity: 0.6 }), s * 0.19, -0.06, 0.235, false);
+    add(head, gSph(0.052, 10, 8), e.robot ? BASIC('#52f6ff') : '#2a2a2a', s * 0.11, 0.04, 0.27, false);
+    if (!e.robot) add(head, gSph(0.055, 8, 6), M('#ff9c8a', { transparent: true, opacity: 0.6 }), s * 0.19, -0.06, 0.235, false);
   }
   const smile = add(head, G('smile', () => new THREE.TorusGeometry(0.065, 0.014, 6, 12, Math.PI)), '#7a3b2a', 0, -0.07, 0.29, false);
   smile.rotation.z = Math.PI;
@@ -1502,11 +1613,15 @@ function makePersonObj(e) {
   } else if (e.hat === 'cap') {
     add(head, G('capDome', () => new THREE.SphereGeometry(0.325, 20, 10, 0, Math.PI * 2, 0, Math.PI * 0.4)), e.hatColor, 0, 0.06, -0.02);
     const brim = add(head, gCyl(0.16, 0.16, 0.03, 16), e.hatColor, 0, 0.2, 0.25); brim.scale.set(1.2, 1, 1);
-  } else {
+  } else if (!e.robot) {
     const hair = add(head, G('hair', () => new THREE.SphereGeometry(0.33, 20, 12, 0, Math.PI * 2, 0, Math.PI * 0.55)), e.hair, 0, 0.02, -0.02);
     hair.rotation.x = -0.35;
     if (e.hairStyle === 1) add(head, gSph(0.13, 10, 8), e.hair, 0, 0.12, -0.3);
     if (e.hairStyle === 2) add(head, gCap(0.11, 0.25), e.hair, 0, -0.18, -0.26);
+  }
+  if (e.robot) {
+    add(head, gCyl(0.018, 0.018, 0.4, 6), skin, 0.22, 0.4, -0.12);
+    add(head, gSph(0.055, 8, 6), BASIC('#52f6ff'), 0.22, 0.62, -0.12);
   }
   if (e.vip) {
     const gold = M('#f5c242', { metalness: 0.6, roughness: 0.3, side: THREE.DoubleSide });
@@ -1542,7 +1657,8 @@ function makeZoneObj(d) {
 }
 function drawZone(o, d) {
   const cost = zoneCost(d), paid = L.paid[d.id] || 0, left = Math.ceil(cost - paid), afford = S.money >= cost - paid;
-  const key = `${left}|${afford}|${d.name}`;
+  const info = d.id === 'soda' && loc().special.drinkName ? itemInfo('soda') : d;
+  const key = `${left}|${afford}|${info.name}`;
   if (key === o.key) return;
   o.key = key;
   const c = o.c.getContext('2d'), frac = paid / cost;
@@ -1554,12 +1670,12 @@ function drawZone(o, d) {
   c.setLineDash([26, 16]); c.lineWidth = 12; c.strokeStyle = afford ? '#22b573' : '#ffffff';
   c.beginPath(); c.roundRect(14, 14, 228, 228, 36); c.stroke();
   c.textAlign = 'center'; c.textBaseline = 'middle';
-  const name = d.name.toUpperCase();
+  const name = info.name.toUpperCase();
   c.fillStyle = '#4a3112'; c.font = `900 30px ${UI_FONT}`;
   const nw = c.measureText(name).width;
   if (nw > 200) c.font = `900 ${Math.floor(30 * 200 / nw)}px ${UI_FONT}`;
   c.fillText(name, 128, 52);
-  c.font = `76px ${UI_FONT}`; c.fillText(d.icon, 128, 124);
+  c.font = `76px ${UI_FONT}`; c.fillText(info.icon, 128, 124);
   c.fillStyle = afford ? '#0f8a52' : '#4a3112'; c.font = `900 44px ${UI_FONT}`; c.fillText('$' + fmt(left), 128, 200);
   o.tex.needsUpdate = true;
 }
@@ -1579,6 +1695,7 @@ function makeMat(p, label, icon, color) {
 }
 makeMat(DROP, 'DROP', '📦', '#d9822b');
 makeMat(CASHIER, 'SERVE', '💁', '#2f7fd8');
+const salesMat = makeMat(SALES_CASHIER, 'SERVE 2', '💁', '#138d82');
 makeMat(TRASH, 'TRASH', '🗑️', '#7f8c8d');
 {
   const bin = new THREE.Group(); bin.position.set(X(TRASH.x) - 1.15, 0, Z(TRASH.y) - 0.1);
@@ -1631,7 +1748,8 @@ function pushInst(im, x, y, z, ry = 0, rx = 0, rz = 0) {
   im.setMatrixAt(im.count++, tmpM);
 }
 const BOX_H = 0.145;
-const cupIM = instanced(new THREE.CylinderGeometry(0.15, 0.11, 0.3, 14), [M('#e8473b'), M('#ffffff'), M('#ffffff')], 600);
+const cupBodyMat = ownMat('#e8473b'), cupTopMat = ownMat('#ffffff');
+const cupIM = instanced(new THREE.CylinderGeometry(0.15, 0.11, 0.3, 14), [cupBodyMat, cupTopMat, M('#ffffff')], 600);
 const coneIM = instanced(new THREE.CylinderGeometry(0.13, 0.025, 0.26, 12), M('#d9a35b'), 600);
 const scoopIM = instanced(new THREE.SphereGeometry(0.15, 12, 10), M('#ff9ec4'), 600);
 const ITEM_H = { pizza: BOX_H, soda: 0.3, cream: 0.4 };
@@ -1768,7 +1886,15 @@ function syncScene(dt) {
     ob.root.position.set(x, 0, z);
     if (o.type === 'soda') for (let i = 0; i < o.stock; i++) pushItem('soda', x + 0.95, 0.45 + Math.floor(i / 3) * 0.3, z + (i % 3 - 1) * 0.4);
     else for (let i = 0; i < o.stock; i++) pushItem('cream', x + (Math.floor(i / 4) % 2 ? 0.25 : -0.25), 0.9 + Math.floor(i / 8) * 0.4, z + (i % 4 - 1.5) * 0.36);
-    if (!stationMats[o.id]) stationMats[o.id] = makeMat(o.pick, 'PICK UP', ITEMS[o.type].icon, '#ffffff');
+    const icon = itemInfo(o.type).icon, oldMat = stationMats[o.id];
+    if (oldMat && oldMat.userData.icon !== icon) {
+      oldMat.removeFromParent(); oldMat.geometry.dispose(); oldMat.material.map.dispose(); oldMat.material.dispose();
+      delete stationMats[o.id];
+    }
+    if (!stationMats[o.id]) {
+      stationMats[o.id] = makeMat(o.pick, 'PICK UP', icon, '#ffffff');
+      stationMats[o.id].userData.icon = icon;
+    }
     stationMats[o.id].visible = true;
     const pct = Math.round(o.timer / bakeTime(o) * 100);
     label('st' + o.id, x, 2.3, z, o.stock >= stockMax(o) ? '<span class="tag">FULL</span>' : `<div class="bar"><i style="width:${pct}%"></i></div>`);
@@ -1787,18 +1913,19 @@ function syncScene(dt) {
   }
 
   // counter stock
+  salesRegister.visible = salesMat.visible = !!L.unlocked.salesclerk;
   const cz = Z(COUNTER.y + COUNTER.h / 2);
   // Pizza: 4 columns x 2 rows x 10 high. Soda and dessert: 3 slots per layer.
   // Pizza: 8 stacks (4 columns x 2 rows); past 80 the stacks keep growing.
   for (let i = 0; i < L.counter; i++) {
     const st = Math.floor(i / 10) % 8, h = i % 10 + 10 * Math.floor(i / 80);
-    pushInst(boxIM, X(COUNTER.x + 24 + (st % 4) * 28), 1.06 + 0.065 + BOX_H * h, cz + (st >= 4 ? 0.33 : -0.33), (i % 3 - 1) * 0.05);
+    pushInst(boxIM, X(COUNTER.x + 14 + (st % 4) * 23), 1.06 + 0.065 + BOX_H * h, cz + (st >= 4 ? 0.33 : -0.33), (i % 3 - 1) * 0.05);
   }
   // Soda and dessert: 3 per layer, up to 5 layers; larger amounts show a count.
-  for (let i = 0; i < Math.min(L.soda, 15); i++) pushItem('soda', X(676), 1.06 + Math.floor(i / 3) * 0.3, cz + (i % 3 - 1) * 0.4);
-  for (let i = 0; i < Math.min(L.cream, 15); i++) pushItem('cream', X(704), 1.06 + Math.floor(i / 3) * 0.4, cz + (i % 3 - 1) * 0.4);
-  if (L.soda > 15) label('csoda', X(676), 2.75, cz, `<span class="tag">🥤×${L.soda}</span>`);
-  if (L.cream > 15) label('ccream', X(704), 3.25, cz, `<span class="tag">🍦×${L.cream}</span>`);
+  for (let i = 0; i < Math.min(L.soda, 15); i++) pushItem('soda', X(704), 1.06 + Math.floor(i / 3) * 0.3, cz + (i % 3 - 1) * 0.4);
+  for (let i = 0; i < Math.min(L.cream, 15); i++) pushItem('cream', X(776), 1.06 + Math.floor(i / 3) * 0.4, cz + (i % 3 - 1) * 0.4);
+  if (L.soda > 15) label('csoda', X(704), 2.75, cz, `<span class="tag">${itemInfo('soda').icon}×${L.soda}</span>`);
+  if (L.cream > 15) label('ccream', X(776), 3.25, cz, `<span class="tag">🍦×${L.cream}</span>`);
   if (L.counter >= counterCap('pizza')) label('cfull', X(COUNTER.x + 66), 3.0, cz, '<span class="tag">FULL</span>');
 
   // drive-thru
@@ -1818,7 +1945,7 @@ function syncScene(dt) {
     const dx = driveCounter.position.x, sz = Z(DRIVE_COUNTER.y + 22) + 2.0, cz2 = sz + 0.42;
     for (let i = 0; i < Math.min(L.dsoda, 8); i++) pushItem('soda', dx + (i % 2 ? 0.3 : -0.3), 1.06 + Math.floor(i / 2) * 0.3, sz);
     for (let i = 0; i < Math.min(L.dcream, 8); i++) pushItem('cream', dx + (i % 2 ? 0.3 : -0.3), 1.06 + Math.floor(i / 2) * 0.4, cz2);
-    if (L.dsoda > 8) label('dsoda', dx, 2.5, sz, `<span class="tag">🥤×${L.dsoda}</span>`);
+    if (L.dsoda > 8) label('dsoda', dx, 2.5, sz, `<span class="tag">${itemInfo('soda').icon}×${L.dsoda}</span>`);
     if (L.dcream > 8) label('dcream', dx, 2.9, cz2, `<span class="tag">🍦×${L.dcream}</span>`);
   }
 
@@ -1832,6 +1959,7 @@ function syncScene(dt) {
     });
     popScale(ob);
     ob.root.position.set(X(t.x), 0, Z(t.y));
+    ob.parasol.visible = !!loc().special.parasols;
     const n = seatCount(t);
     ob.seats.forEach((so, i) => {
       const seat = t.seats[i], c = seat.occupant, eating = c && c.state === 'eat';
@@ -1848,7 +1976,10 @@ function syncScene(dt) {
   // people
   animPerson(player, dt);
   for (const w of workers) animPerson(w, dt);
-  for (const c of queue) animPerson(c, dt);
+  for (const c of queue) {
+    animPerson(c, dt);
+    for (const guest of c.guests || []) animPerson(guest, dt);
+  }
   for (const c of walkers) animPerson(c, dt);
   playerRing.position.set(X(player.x), 0.012, Z(player.y));
   const cap = carryCap(L.up.cap);
@@ -1880,24 +2011,23 @@ function syncScene(dt) {
   // upgrade chip for the equipment next to the player
   const ne = nearestEquip();
   if (ne) {
-    const k = EQUIP[equipKind(ne.id)], lv = lvOf(ne.id), cost = equipCost(ne.id);
+    const k = equipInfo(ne.id), lv = lvOf(ne.id), cost = equipCost(ne.id);
     label('equip', X(ne.x), k.h, Z(ne.y), lv >= EQUIP_MAX
       ? `<div class="upchip max">${k.icon} ${k.name} · Lv MAX</div>`
       : `<div class="upchip${S.money >= cost ? ' ok' : ''}" data-up="${ne.id}">⬆ ${k.icon} ${k.name} Lv ${lv}→${lv + 1} · $${fmt(cost)}<kbd>E</kbd></div>`);
   }
 
   // bubbles and hints
-  const f = queue[0];
-  if (f && f.x === QUEUE_X && f.y === QUEUE_Y) label('bub' + f.id, X(f.x), 2.35, Z(f.y), orderHtml(f));
-  for (let i = 1; i < queue.length; i++) {
-    const c = queue[i];
-    if (c.vip) label('vip' + c.id, X(c.x), 2.3, Z(c.y), '<div class="icon">👑</div>');
+  for (const c of queue) {
+    if (c.lane !== undefined && c.x === servicePoint(c.lane).x && c.y === QUEUE_Y) {
+      label('bub' + c.id, X(c.x), 2.35, Z(c.y), orderHtml(c));
+      if (!clerkPresent(c.lane) && L.counter > 0) label('alert' + c.lane, X(servicePoint(c.lane).x), 1.4, Z(CASHIER.y), '<div class="alert">!</div>');
+    } else if (c.vip) label('vip' + c.id, X(c.x), 2.3, Z(c.y), '<div class="icon">👑</div>');
     else if (c.patience < PATIENCE * 0.35) label('mad' + c.id, X(c.x), 2.3, Z(c.y), '<div class="icon">😠</div>');
   }
   for (const c of walkers) if (c.angry) label('mad' + c.id, X(c.x), 2.3, Z(c.y), '<div class="icon">😡</div>');
   const fc = carQueue[0];
   if (fc && fc.y === CAR_Y) label('car' + fc.id, X(fc.x) + 0.6, 2.1, Z(fc.y), orderHtml(fc));
-  if (f && f.y === QUEUE_Y && !cashierPresent() && L.counter > 0) label('alert', X(CASHIER.x), 1.4, Z(CASHIER.y), '<div class="alert">!</div>');
 
   const gt = guideTarget();
   arrow.visible = !!gt && dist(player, gt) > 40;
@@ -1933,14 +2063,14 @@ function syncScene(dt) {
 }
 
 function orderHtml(c) {
-  const parts = ITEM_TYPES.filter(t => c.order[t] > 0).map(t => `${ITEMS[t].icon} ${c.got[t]}/${c.order[t]}`);
+  const parts = ITEM_TYPES.filter(t => c.order[t] > 0).map(t => `${itemInfo(t).icon} ${c.got[t]}/${c.order[t]}`);
   let bar = '';
   if (c.patience !== undefined) {
     const p = clamp(c.patience / (c.vip ? VIP_PATIENCE : PATIENCE), 0, 1);
     const color = p > 0.5 ? '#38c979' : p > 0.25 ? '#f7a531' : '#ef5b5b';
     bar = `<div class="pat"><i style="width:${Math.round(p * 100)}%;background:${color}"></i></div>`;
   }
-  return `<div class="bubble${c.vip ? ' vip' : ''}">${c.vip ? '👑 ' : ''}${parts.join(' &nbsp;')}${bar}</div>`;
+  return `<div class="bubble${c.vip ? ' vip' : ''}">${c.vip ? '👑 ' : ''}${partySize(c) > 1 ? `👥${partySize(c)} · ` : ''}${parts.join(' &nbsp;')}${bar}</div>`;
 }
 
 function guideTarget() {
@@ -1957,6 +2087,17 @@ function guideTarget() {
 const moneyEl = document.getElementById('moneyVal');
 const upBtn = document.getElementById('upBtn'), soundBtn = document.getElementById('soundBtn');
 const panel = document.getElementById('panel'), upList = document.getElementById('upList');
+const autoEnabled = document.getElementById('autoEnabled'), autoReserve = document.getElementById('autoReserve');
+const autoStatus = document.getElementById('autoStatus');
+function saveAutoControls() {
+  if (!autoReserve.value.trim() || !setAutoSettings(autoEnabled.checked, Number(autoReserve.value))) {
+    toast('Enter a cash reserve as a whole number, zero or more.');
+    autoReserve.value = L.auto.reserve;
+  }
+  refreshPanel();
+}
+autoEnabled.addEventListener('change', saveAutoControls);
+autoReserve.addEventListener('change', saveAutoControls);
 let shownMoney = -1;
 
 upList.innerHTML = UPGRADES.map(u => `
@@ -1986,6 +2127,14 @@ function refreshPanel() {
     else if (l >= u.max) { b.textContent = 'MAX'; b.disabled = true; }
     else { b.textContent = '$' + fmt(upCost(u)); b.disabled = S.money < upCost(u); }
   }
+  const hired = !!L.unlocked.manager;
+  autoEnabled.disabled = autoReserve.disabled = !hired;
+  autoEnabled.checked = L.auto.enabled;
+  if (document.activeElement !== autoReserve) autoReserve.value = L.auto.reserve;
+  const remaining = equipment().some(e => lvOf(e.id) < EQUIP_MAX);
+  autoStatus.textContent = !hired ? 'Hire a Manager to enable this.' : !L.auto.enabled ? 'Off. Your manager still collects cash.'
+    : !remaining ? 'All current equipment is at its maximum level.'
+    : `On. Keeps $${fmt(L.auto.reserve)} in shared cash. Active shop only.`;
 }
 function togglePanel(open = panel.hidden) {
   panel.hidden = !open;
@@ -2002,11 +2151,11 @@ function refreshShops() {
       info = `${done}/${UNLOCKS.length} unlocked · ` + (i === S.cur ? 'you are here' : `earning $${fmt(idleRateFor(sh, i))}/s`);
       btn = i === S.cur ? '<button disabled>Here</button>' : `<button data-shop="${i}">Go</button>`;
     } else if (next) {
-      info = `Unlock everything in ${LOCATIONS[i - 1].name}, then pay $${fmt(NEXT_SHOP_COST * lc.costMult)}`;
+      info = `Unlock core equipment and staff in ${LOCATIONS[i - 1].name}, then pay $${fmt(NEXT_SHOP_COST * lc.costMult)}. Extra sales and restocking staff are optional.`;
     } else info = 'Open more shops to find out';
     return `<div class="row"><div class="ic">${known ? lc.icon : '❔'}</div>
       <div class="tx"><div class="nm">${known ? lc.name : '???'}</div><div class="ds">${info}</div>
-      ${known ? `<div class="ds">Pizza prices ×${lc.priceMult}</div>` : ''}</div>${btn}</div>`;
+      ${known ? `<div class="ds">Pizza prices ×${lc.priceMult}</div><div class="ds"><b>${lc.special.title}</b> · ${lc.special.desc}</div>` : ''}</div>${btn}</div>`;
   }).join('') + franchiseHtml();
   if (shopList._html !== html) { shopList.innerHTML = html; shopList._html = html; }
 }
@@ -2057,7 +2206,8 @@ function hud(dt) {
   const g = L.goal;
   const goal = g ? `🎯 ${GOAL_TEXT[g.type](g.target)} · ${fmt(Math.min(g.progress, g.target))}/${fmt(g.target)} · 💵 $${fmt(g.reward)}` : '';
   if (goalTag.textContent !== goal) goalTag.textContent = goal;
-  const ev = rushLeft > 0 ? `🔥 Rush hour · ${Math.ceil(rushLeft)}s` : '';
+  const ev = rushLeft > 0 ? `🔥 ${loc().special.rushEvery ? 'Lunch rush' : 'Rush hour'} · ${Math.ceil(rushLeft)}s`
+    : loc().special.rushEvery && L.unlocked.cashier ? `🏙️ Lunch rush in ${Math.ceil(rushT)}s` : '';
   if (eventTag.textContent !== ev) eventTag.textContent = ev;
   // Dock badge (macOS app): show cash waiting while the window is in the background.
   badgeT -= dt;
