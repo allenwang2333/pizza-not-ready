@@ -216,7 +216,7 @@ const CARRIERS = ['carrier1', 'carrier2', 'carrier3'];
 // Seat offsets from the table center: two chairs south, two north.
 const SEATS = [{ dx: -22, dy: 45 }, { dx: 22, dy: 45 }, { dx: -22, dy: -45 }, { dx: 22, dy: -45 }];
 const ITEMS = {
-  pizza: { icon: '🍕', base: 5 },
+  pizza: { name: 'Pizza', icon: '🍕', base: 5 },
   soda:  { icon: '🥤', base: 3 },
   cream: { icon: '🍦', base: 8 },
   side:  { icon: '🧋', base: 6 },
@@ -306,6 +306,15 @@ const LOCATIONS = [
     theme: { sky: '#161a33', ground: ['#8d8f99', '60,62,72', '180,182,190'], floor: { kind: 'metal' },
       tile: ['#e3e6ec', '#c5cad3'], wallKind: 'panels', wallColor: '#5b6378', wall: '#6c7590', trim: '#d6dbe6',
       leaf: '#7a7f8c', leaf2: '#9a9fac', trunk: '#5b5f6b', cloth: ['#7a5cff', '#e3e6ec'] } },
+  { name: 'Jianbing Street', icon: '🏮', priceMult: 243, costMult: 3125, orderMax: 6, carMult: 1.5,
+    side: { name: 'Soy Milk', icon: '🥛', bar: 'Soy Milk Bar', chance: 0.5, cup: '#f4ecd8', led: '#ffe9a8' },
+    special: { title: 'Jianbing breakfast', desc: 'Sell 煎饼果子 (jianbing) on a griddle instead of pizza. A 30-second breakfast rush comes after every 100 seconds of normal service.',
+      mainName: 'Jianbing', mainIcon: '🥞', drinkName: 'Sour Plum Drink', drinkIcon: '🍹', drinkColors: ['#7b2d3b', '#5e1f2c'],
+      rushEvery: 100, rushDuration: 30, rushName: 'Breakfast rush', rushIcon: '🏮' },
+    theme: { sky: '#f9dfc4', ground: ['#b7b0a2', '110,104,92', '215,208,194'], floor: { kind: 'wood', h: 14, s: 45, l: 38 },
+      tile: ['#f4e4c8', '#e2cba4'], wallKind: 'lattice', wallColor: '#c42a1f', wall: '#d8362a', trim: '#f5c242',
+      leaf: '#e0a82e', leaf2: '#f0c24a', trunk: '#5b3a22', cloth: ['#c42a1f', '#f5c242'], lanterns: true,
+      signText: '🥞 煎饼果子 JIANBING' } },
 ];
 
 // ================= upgrades =================
@@ -327,7 +336,7 @@ const UPGRADES = [
     desc: l => `Bake ${ovenTime(l).toFixed(1)}s, hold ${ovenMax(l)}`,
     next: l => `${ovenTime(l + 1).toFixed(1)}s, ${ovenMax(l + 1)}` },
   { id: 'price', icon: '🍕', name: 'Better Recipe', max: 10, base: 60, mult: 1.7,
-    desc: l => `Pizza sells for $${Number(itemPrice('pizza', l).toFixed(2))}`,
+    desc: l => `${itemInfo('pizza').name} sells for $${Number(itemPrice('pizza', l).toFixed(2))}`,
     next: l => `$${Number(itemPrice('pizza', l + 1).toFixed(2))}` },
   { id: 'cust', icon: '📣', name: 'Word of Mouth', max: 8, base: 120, mult: 1.8,
     desc: l => `Customer every ${spawnTimeFor(l).toFixed(1)}s`, next: l => `${spawnTimeFor(l + 1).toFixed(1)}s` },
@@ -381,10 +390,12 @@ function loadState() {
 let S = loadState(), L = S.shops[S.cur];
 const loc = () => LOCATIONS[S.cur];
 const itemInfo = t => t === 'side' ? { ...ITEMS.side, ...loc().side }
+  : t === 'pizza' && loc().special.mainName ? { ...ITEMS.pizza, name: loc().special.mainName, icon: loc().special.mainIcon }
   : t === 'soda' && loc().special.drinkName
     ? { ...ITEMS[t], name: loc().special.drinkName, icon: loc().special.drinkIcon } : ITEMS[t];
 // Unlock zones for drinks use the local name and icon.
-const zoneInfo = d => d.id === 'side' || (d.id === 'soda' && loc().special.drinkName) ? itemInfo(d.id) : d;
+const zoneInfo = d => d.id === 'side' || (d.id === 'soda' && loc().special.drinkName) ? itemInfo(d.id)
+  : d.id.startsWith('oven') && loc().special.mainName ? { ...d, name: 'Griddle' } : d;
 const rushDelay = () => loc().special.rushEvery || rand(240, 420);
 // Each prestige star adds 10% to all prices.
 const starMult = () => 1 + 0.1 * S.stars;
@@ -461,7 +472,8 @@ const EQUIP = {
 };
 const EQUIP_MAX = 5;
 const equipKind = id => id.startsWith('oven') ? 'oven' : id.startsWith('table') ? 'table' : id;
-const equipInfo = id => id === 'side' ? { ...EQUIP.side, ...itemInfo('side'), name: itemInfo('side').bar }
+const equipInfo = id => id.startsWith('oven') && loc().special.mainName ? { ...EQUIP.oven, name: 'Griddle' }
+  : id === 'side' ? { ...EQUIP.side, ...itemInfo('side'), name: itemInfo('side').bar }
   : id === 'soda' && loc().special.drinkName ? { ...EQUIP.soda, ...itemInfo('soda') } : EQUIP[equipKind(id)];
 const lvOf = (id, sh = L) => sh.lv[id] || 1;
 const equipCost = id => Math.round(EQUIP[equipKind(id)].base * Math.pow(2.5, lvOf(id) - 1) * loc().costMult);
@@ -1048,7 +1060,7 @@ function updateEvents(dt) {
     if (rushLeft <= 0) toast('Rush hour is over. Nice work!');
   } else if ((rushT -= dt) <= 0) {
     rushT = rushDelay(); rushLeft = loc().special.rushDuration || 45; spawnT = 0;
-    toast(`🔥 ${loc().special.rushEvery ? 'Office lunch rush' : 'Rush hour'}! Lots of customers for ${rushLeft} seconds`, 4);
+    toast(`🔥 ${loc().special.rushName || (loc().special.rushEvery ? 'Office lunch rush' : 'Rush hour')}! Lots of customers for ${rushLeft} seconds`, 4);
   }
   if ((vipT -= dt) <= 0) {
     vipT = rand(150, 260); vipPending = true; spawnT = Math.min(spawnT, 0.5);
@@ -1342,6 +1354,45 @@ function canvasTex(w, h, draw) {
 const noise = (ctx, w, h, n, a) => {
   for (let i = 0; i < n; i++) { ctx.fillStyle = `rgba(${Math.random() < 0.5 ? '0,0,0' : '255,255,255'},${a})`; ctx.fillRect(Math.random() * w, Math.random() * h, 2, 2); }
 };
+// Pizza box and pizza slice textures; jian draws a folded jianbing and a crepe wedge instead.
+function paintBoxTop(c, w, h, jian) {
+  c.textAlign = 'center'; c.textBaseline = 'middle';
+  if (jian) {
+    c.fillStyle = '#e9bd5a'; c.fillRect(0, 0, w, h);
+    c.strokeStyle = '#b9822f'; c.lineWidth = 6; c.strokeRect(5, 5, w - 10, h - 10);
+    c.strokeStyle = '#a1451f'; c.lineWidth = 4; c.beginPath();
+    for (let x = 14; x < w - 10; x += 14) c.lineTo(x, 22 + (x / 14 % 2) * 14);
+    c.stroke();
+    c.fillStyle = '#4fae4a';
+    for (let i = 0; i < 14; i++) c.fillRect(12 + (i * 37) % 100, 80 + (i * 23) % 36, 6, 3);
+    c.fillStyle = '#c42a1f'; c.fillRect(0, 44, w, 34);
+    c.fillStyle = '#fff'; c.font = `900 26px ${UI_FONT}`; c.fillText('煎饼', 64, 62);
+    return;
+  }
+  c.fillStyle = '#efcf9b'; c.fillRect(0, 0, w, h);
+  c.strokeStyle = '#d4ad72'; c.lineWidth = 6; c.strokeRect(5, 5, w - 10, h - 10);
+  c.fillStyle = '#e8473b'; c.beginPath(); c.arc(64, 64, 34, 0, Math.PI * 2); c.fill();
+  c.fillStyle = '#fff'; c.font = `900 22px ${UI_FONT}`; c.fillText('PIZZA', 64, 66);
+}
+function paintPizza(c, jian) {
+  if (jian) {
+    c.fillStyle = '#d9a447'; c.beginPath(); c.arc(64, 64, 64, 0, Math.PI * 2); c.fill();
+    c.fillStyle = '#ecc873'; c.beginPath(); c.arc(64, 64, 56, 0, Math.PI * 2); c.fill();
+    c.fillStyle = '#c98a3a';
+    for (let i = 0; i < 9; i++) { const a = i * 0.7, r = 18 + (i % 3) * 11; c.beginPath(); c.arc(64 + Math.cos(a) * r, 64 + Math.sin(a) * r, 6, 0, Math.PI * 2); c.fill(); }
+    c.fillStyle = '#ffd23f'; c.beginPath(); c.arc(50, 56, 14, 0, Math.PI * 2); c.fill();
+    c.fillStyle = '#4fae4a';
+    for (let i = 0; i < 9; i++) { const a = i * 1.3 + 0.4, r = 22 + (i % 3) * 9; c.fillRect(64 + Math.cos(a) * r, 64 + Math.sin(a) * r, 6, 3); }
+    return;
+  }
+  c.fillStyle = '#e2a75e'; c.beginPath(); c.arc(64, 64, 64, 0, Math.PI * 2); c.fill();
+  c.fillStyle = '#d8432f'; c.beginPath(); c.arc(64, 64, 54, 0, Math.PI * 2); c.fill();
+  c.fillStyle = '#ffd25a'; c.beginPath(); c.arc(64, 64, 49, 0, Math.PI * 2); c.fill();
+  c.fillStyle = '#b8322a';
+  for (let i = 0; i < 9; i++) { const a = i * 0.7, r = 18 + (i % 3) * 11; c.beginPath(); c.arc(64 + Math.cos(a) * r, 64 + Math.sin(a) * r, 7, 0, Math.PI * 2); c.fill(); }
+  c.fillStyle = '#3e9b4a';
+  for (let i = 0; i < 6; i++) { const a = i * 1.1 + 0.4, r = 30; c.fillRect(64 + Math.cos(a) * r, 64 + Math.sin(a) * r, 6, 4); }
+}
 const TEX = {
   tile: canvasTex(128, 128, () => {}),
   wood: canvasTex(256, 256, () => {}),
@@ -1349,21 +1400,8 @@ const TEX = {
   cloth: canvasTex(64, 64, () => {}),
   grass: canvasTex(128, 128, () => {}),
   asphalt: canvasTex(128, 128, (c, w, h) => { c.fillStyle = '#545a63'; c.fillRect(0, 0, w, h); noise(c, w, h, 900, 0.08); }),
-  boxTop: canvasTex(128, 128, (c, w, h) => {
-    c.fillStyle = '#efcf9b'; c.fillRect(0, 0, w, h);
-    c.strokeStyle = '#d4ad72'; c.lineWidth = 6; c.strokeRect(5, 5, w - 10, h - 10);
-    c.fillStyle = '#e8473b'; c.beginPath(); c.arc(64, 64, 34, 0, Math.PI * 2); c.fill();
-    c.fillStyle = '#fff'; c.font = `900 22px ${UI_FONT}`; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('PIZZA', 64, 66);
-  }),
-  pizza: canvasTex(128, 128, c => {
-    c.fillStyle = '#e2a75e'; c.beginPath(); c.arc(64, 64, 64, 0, Math.PI * 2); c.fill();
-    c.fillStyle = '#d8432f'; c.beginPath(); c.arc(64, 64, 54, 0, Math.PI * 2); c.fill();
-    c.fillStyle = '#ffd25a'; c.beginPath(); c.arc(64, 64, 49, 0, Math.PI * 2); c.fill();
-    c.fillStyle = '#b8322a';
-    for (let i = 0; i < 9; i++) { const a = i * 0.7, r = 18 + (i % 3) * 11; c.beginPath(); c.arc(64 + Math.cos(a) * r, 64 + Math.sin(a) * r, 7, 0, Math.PI * 2); c.fill(); }
-    c.fillStyle = '#3e9b4a';
-    for (let i = 0; i < 6; i++) { const a = i * 1.1 + 0.4, r = 30; c.fillRect(64 + Math.cos(a) * r, 64 + Math.sin(a) * r, 6, 4); }
-  }),
+  boxTop: canvasTex(128, 128, (c, w, h) => paintBoxTop(c, w, h, false)),
+  pizza: canvasTex(128, 128, c => paintPizza(c, false)),
   bill: canvasTex(64, 32, (c, w, h) => {
     c.fillStyle = '#5fcf86'; c.fillRect(0, 0, w, h);
     c.strokeStyle = '#2e9a58'; c.lineWidth = 3; c.strokeRect(3, 3, w - 6, h - 6);
@@ -1543,6 +1581,12 @@ function paintWall(c, w, h, th) {
     c.fillStyle = 'rgba(255,255,255,.7)';
     for (let i = 0; i <= w; i += 16) c.fillRect(i, 0, 1.5, h);
     for (let i = 0; i <= h; i += 16) c.fillRect(0, i, w, 1.5);
+  } else if (th.wallKind === 'lattice') {
+    c.strokeStyle = '#f0b93a'; c.lineWidth = 3;
+    for (let i = -h; i < w + h; i += 32) {
+      c.beginPath(); c.moveTo(i, 0); c.lineTo(i + h, h); c.moveTo(i + h, 0); c.lineTo(i, h); c.stroke();
+    }
+    c.strokeStyle = '#7a1710'; c.lineWidth = 6; c.strokeRect(0, 0, w, h);
   } else if (th.wallKind === 'panels') {
     for (let x = 0; x < w; x += 64) for (let y = 0; y < h; y += 64) {
       shade(c, x + 2, y + 2, 60, 60, 0.12);
@@ -1551,10 +1595,10 @@ function paintWall(c, w, h, th) {
   }
   noise(c, w, h, 800, 0.06);
 }
-function paintSign(name) {
+function paintSign(th, name) {
   paint(TEX.sign, (c, w, h) => {
     c.fillStyle = '#3a2416'; c.beginPath(); c.roundRect(0, 0, w, h, 24); c.fill();
-    const t = '🍕 ' + name.toUpperCase();
+    const t = th.signText || '🍕 ' + name.toUpperCase();
     c.font = `900 52px ${UI_FONT}`;
     const tw = c.measureText(t).width;
     if (tw > w - 40) c.font = `900 ${Math.floor(52 * (w - 40) / tw)}px ${UI_FONT}`;
@@ -1578,9 +1622,16 @@ function applyTheme(th) {
   paint(TEX.stripes, c => { for (let i = 0; i < 4; i++) { c.fillStyle = th.cloth[i % 2]; c.fillRect(i * 16, 0, 16, 64); } });
   wallMat.color.set(th.wall); trimMat.color.set(th.trim);
   leafMat.color.set(th.leaf); leafMat2.color.set(th.leaf2); trunkMat.color.set(th.trunk);
-  setLook(cupBodyMat, loc().special.drinkName ? '#7b4933' : '#e8473b');
-  setLook(cupTopMat, loc().special.drinkName ? '#633a27' : '#ffffff');
-  paintSign(loc().name);
+  const [cupBody, cupTop] = loc().special.drinkColors || (loc().special.drinkName ? ['#7b4933', '#633a27'] : ['#e8473b', '#ffffff']);
+  setLook(cupBodyMat, cupBody);
+  setLook(cupTopMat, cupTop);
+  paintSign(th, loc().name);
+  const jian = !!loc().special.mainName;
+  paint(TEX.boxTop, (c, w, h) => paintBoxTop(c, w, h, jian));
+  paint(TEX.pizza, c => paintPizza(c, jian));
+  boxSide.color.set(jian ? '#f1dfae' : '#e4bc82');
+  paint(menuTex, paintMenu);
+  lanterns.visible = !!th.lanterns;
 }
 // Called after switching shops: entity meshes get rebuilt without the pop-in animation.
 function resetScene() {
@@ -1632,6 +1683,11 @@ const torus = (r, tube) => G(`t${r},${tube}`, () => new THREE.TorusGeometry(r, t
 const rotated = (mesh, x = 0, y = 0, z = 0) => { mesh.rotation.set(x, y, z); return mesh; };
 
 // ---- counters ----
+const paintMenu = (c, w, h) => {
+  c.fillStyle = '#06222b'; c.fillRect(0, 0, w, h); c.textAlign = 'center'; c.textBaseline = 'middle'; c.font = `54px ${UI_FONT}`;
+  ['pizza', 'soda', 'cream', 'side'].forEach((t, i) => c.fillText(itemInfo(t).icon, w / 2, 32 + i * 54));
+};
+const menuTex = canvasTex(128, 224, paintMenu);
 const counterTopMat = ownMat('#f6e3c3'), counterMat = ownMat('#b8743f'), counterPanelMat = ownMat('#d18b4f');
 const counterGroup = new THREE.Group(), salesRegister = new THREE.Group();
 let counterNeon, counterTrim, counterGuard, counterMenu, counterHolo;
@@ -1657,10 +1713,7 @@ let counterNeon, counterTrim, counterGuard, counterMenu, counterHolo;
   counterMenu = new THREE.Group(); counterMenu.position.set(3.15, 1.06, 0.1); g.add(counterMenu);
   add(counterMenu, gBox(0.16, 0.5, 0.16, 0.03), '#2f3136', 0, 0.25, 0);
   add(counterMenu, gBox(0.52, 0.8, 0.06, 0.02), '#1d2127', 0, 0.9, 0);
-  add(counterMenu, new THREE.PlaneGeometry(0.44, 0.72), new THREE.MeshBasicMaterial({ toneMapped: false, map: canvasTex(128, 224, (c, w, h) => {
-    c.fillStyle = '#06222b'; c.fillRect(0, 0, w, h); c.textAlign = 'center'; c.textBaseline = 'middle'; c.font = `54px ${UI_FONT}`;
-    [ITEMS.pizza.icon, ITEMS.soda.icon, ITEMS.cream.icon, ITEMS.side.icon].forEach((icon, i) => c.fillText(icon, w / 2, 32 + i * 54));
-  }) }), 0, 0.9, 0.035, false);
+  add(counterMenu, new THREE.PlaneGeometry(0.44, 0.72), new THREE.MeshBasicMaterial({ toneMapped: false, map: menuTex }), 0, 0.9, 0.035, false);
   counterHolo = add(g, new THREE.PlaneGeometry(1.2, 0.42), decalMat(canvasTex(256, 90, (c, w, h) => {
     c.fillStyle = 'rgba(6,34,43,.92)'; c.beginPath(); c.roundRect(4, 4, w - 8, h - 8, 22); c.fill();
     c.strokeStyle = '#6fe3ff'; c.lineWidth = 5; c.stroke();
@@ -1696,6 +1749,22 @@ const driveTopMat = ownMat('#f6e3c3'), driveMat = ownMat('#b8743f');
   scene.add(driveCounter);
 }
 
+// ---- lanterns (Jianbing Street) ----
+const lanterns = new THREE.Group(); lanterns.visible = false; scene.add(lanterns);
+{
+  const red = new THREE.MeshStandardMaterial({ color: '#d62a1f', emissive: '#9a1208', emissiveIntensity: 0.9, roughness: 0.5 });
+  const gold = M('#f5c242', { metalness: 0.5, roughness: 0.35 });
+  [-9.1, -5.9, -2.6, 0.6, 3.9, 11.1].forEach((x, i) => {
+    const g = new THREE.Group(); g.position.set(x, 2.58, Z(62)); g.userData.phase = i * 1.7; lanterns.add(g);
+    add(g, gCyl(0.01, 0.01, 0.3, 4), '#6d4428', 0, -0.15, 0, false);
+    const lamp = new THREE.Group(); lamp.position.y = -0.58; g.add(lamp);
+    add(lamp, gSph(0.3, 16, 12), red, 0, 0, 0).scale.set(1, 0.82, 1);
+    for (const y of [0.27, -0.27]) add(lamp, gCyl(0.15, 0.15, 0.06, 14), gold, 0, y, 0, false);
+    add(lamp, gCyl(0.012, 0.012, 0.3, 4), '#f5c242', 0, -0.45, 0, false);
+    add(lamp, gSph(0.04, 8, 6), gold, 0, -0.62, 0, false);
+  });
+}
+
 // ---- dynamic object builders ----
 // Oven: Lv 1 clay dome, Lv 2 brick arch and wood stack, Lv 3 steel deck oven,
 // Lv 4 smart conveyor oven, Lv 5 plasma chamber oven.
@@ -1705,7 +1774,8 @@ function makeOvenObj() {
   const chimneyMat = ownMat('#7d8389');
   const clay = new THREE.Group(), brick = new THREE.Group(), chimney = new THREE.Group();
   const deck = new THREE.Group(), smart = new THREE.Group(), future = new THREE.Group();
-  root.add(clay, brick, chimney, deck, smart, future);
+  const griddle = new THREE.Group(), steamer = new THREE.Group();
+  root.add(clay, brick, chimney, deck, smart, future, griddle, steamer);
   add(root, gBox(2.3, 0.85, 1.9, 0.08), '#a3a8ae', 0, 0.425, 0);
   add(root, gBox(1.7, 0.1, 0.65, 0.03), '#c48a55', 0, 0.8, 1.25);
 
@@ -1725,6 +1795,20 @@ function makeOvenObj() {
     b.rotation.z = a - Math.PI / 2;
   }
   for (const [y, z] of [[0.1, 0.35], [0.1, 0.62], [0.3, 0.48]]) rotated(add(brick, gCyl(0.1, 0.1, 0.9, 8), '#7a4b2a', 1.38, y, z), Math.PI / 2);
+
+  // Jianbing Street, Lv 1: a round iron griddle with a thin crepe, egg, scallions and a bamboo spreader.
+  add(griddle, gCyl(1.0, 1.0, 0.1, 36), M('#2b2d31', { metalness: 0.5, roughness: 0.45 }), 0, 0.9, -0.05);
+  add(griddle, gCyl(0.84, 0.84, 0.02, 36), '#e9bd5a', 0, 0.96, -0.05, false);
+  add(griddle, gCyl(0.2, 0.2, 0.025, 16), '#ffd23f', 0.28, 0.975, -0.22, false);
+  for (let i = 0; i < 10; i++) add(griddle, new THREE.BoxGeometry(0.08, 0.02, 0.03), '#4fae4a', Math.cos(i * 2.1) * 0.5, 0.98, -0.05 + Math.sin(i * 1.7) * 0.45, false);
+  add(griddle, gCyl(0.025, 0.025, 1.0, 8), '#c8a15a', 0.55, 1.2, 0.6).rotation.set(0.5, 0, 0.8);
+  add(griddle, new THREE.BoxGeometry(0.34, 0.03, 0.05), '#c8a15a', 0.2, 0.99, 0.35, false).rotation.y = 0.6;
+  const steam = [0, 1, 2].map(i => add(griddle, gSph(0.13, 10, 8), glowMat('#ffffff', 0.3), -0.3 + i * 0.3, 1.3, 0.1, false));
+  // Jianbing Street, Lv 2: red trim and a stack of bamboo steamers.
+  add(steamer, gBox(2.34, 0.05, 1.94, 0.02), '#c42a1f', 0, 0.87, 0);
+  for (let i = 0; i < 3; i++) add(steamer, gCyl(0.4, 0.4, 0.24, 18), i % 2 ? '#d9b26a' : '#c8a15a', 1.55, 0.14 + i * 0.25, 0.3);
+  add(steamer, G('steamLid', () => new THREE.ConeGeometry(0.46, 0.2, 18)), '#d9b26a', 1.55, 0.97, 0.3);
+  add(steamer, gSph(0.05, 8, 6), '#c42a1f', 1.55, 1.1, 0.3);
 
   // Lv 3: a stainless cabinet with a glass window, handle, dials and a copper skirt.
   add(deck, gBox(2.25, 0.8, 1.75, 0.07), bodyMat, 0, 1.25, 0);
@@ -1762,7 +1846,7 @@ function makeOvenObj() {
 
   const light = new THREE.PointLight('#ff9a3c', 1.5, 3, 2);
   light.position.set(0, 0.9, 1.4); root.add(light);
-  return { root, fire, ember, light, domeMat, ringMat, bodyMat, accentMat, chimneyMat, clay, brick, chimney, deck, smart, future, spin, core, pulse };
+  return { root, fire, ember, light, domeMat, ringMat, bodyMat, accentMat, chimneyMat, clay, brick, chimney, deck, smart, future, spin, core, pulse, griddle, steamer, steam };
 }
 
 function makeSodaObj() {
@@ -2200,6 +2284,7 @@ function syncScene(dt) {
   boxIM.count = billIM.count = coinIM.count = confIM.count = cupIM.count = coneIM.count = scoopIM.count = 0;
   sideIM.count = sideLidIM.count = strawIM.count = 0;
   FX.belt.offset.x = -(time * 0.35) % 1;
+  if (lanterns.visible) lanterns.children.forEach(g => { g.rotation.z = Math.sin(time * 1.3 + g.userData.phase) * 0.06; });
   const max = ovenMax(L.up.oven);
 
   for (const k in ovenMats) ovenMats[k].visible = false;
@@ -2210,11 +2295,14 @@ function syncScene(dt) {
       setLook(ob.domeMat, k.dome, k.m, k.r); setLook(ob.ringMat, k.ring, k.m, k.r);
       setLook(ob.bodyMat, k.dome, k.m, k.r); setLook(ob.accentMat, k.ring, k.m, k.r);
       setLook(ob.chimneyMat, ['#7d8389', '#8a4a38', '#9aa1a8', '#2f3136', '#fff1c4'][l - 1], l >= 3 ? 0.5 : 0, l >= 3 ? 0.35 : 0.8);
-      ob.clay.visible = l <= 2; ob.brick.visible = l === 2; ob.chimney.visible = l <= 4;
+      const griddled = !!loc().special.mainName && l <= 2;
+      ob.griddle.visible = griddled; ob.steamer.visible = griddled && l === 2;
+      ob.clay.visible = l <= 2 && !griddled; ob.brick.visible = l === 2 && !griddled; ob.chimney.visible = l <= 4 && !griddled;
       ob.deck.visible = l === 3; ob.smart.visible = l === 4; ob.future.visible = l === 5;
       ob.light.color.set(['#ff9a3c', '#ff8a3c', '#ffb06a', '#6fe3ff', '#ffd9a0'][l - 1]);
     });
     popScale(ob);
+    if (ob.griddle.visible) ob.steam.forEach((m, i) => { const t = (time * 0.5 + i / 3) % 1; m.position.y = 1.15 + t * 0.8; m.scale.setScalar(0.7 + t); m.material.opacity = 0.35 * (1 - t); });
     ob.spin.rotation.y = time * 1.4; ob.core.scale.setScalar(1 + Math.sin(time * 5 + o.x) * 0.1);
     ob.pulse.opacity = 0.65 + 0.35 * Math.sin(time * 3 + o.x);
     const x = X(o.x), z = Z(o.y);
@@ -2223,7 +2311,13 @@ function syncScene(dt) {
     ob.fire.scale.set(f * 1.1, f * 0.7, 0.4); ob.ember.scale.set(1, f * 0.8, 0.4);
     ob.light.intensity = 1 + f * 0.8;
     for (let i = 0; i < o.stock; i++) pushInst(boxIM, x + (i < 8 ? -0.37 : 0.37), 0.85 + 0.065 + BOX_H * (i % 8), z + 1.25, (i % 3 - 1) * 0.04);
-    if (!ovenMats[o.id]) ovenMats[o.id] = makeMat(pickPt(o), 'PICK UP', '🍕', '#ffffff');
+    const mainIcon = itemInfo('pizza').icon;
+    if (ovenMats[o.id] && ovenMats[o.id].userData.icon !== mainIcon) {
+      const old = ovenMats[o.id];
+      old.removeFromParent(); old.geometry.dispose(); old.material.map.dispose(); old.material.dispose();
+      delete ovenMats[o.id];
+    }
+    if (!ovenMats[o.id]) { ovenMats[o.id] = makeMat(pickPt(o), 'PICK UP', mainIcon, '#ffffff'); ovenMats[o.id].userData.icon = mainIcon; }
     ovenMats[o.id].visible = true;
     const pct = Math.round(o.timer / bakeTime(o) * 100);
     label('oven' + o.id, x, 2.75, z, o.stock >= max ? '<span class="tag">FULL</span>' : `<div class="bar"><i style="width:${pct}%"></i></div>`);
@@ -2526,7 +2620,7 @@ function refreshShops() {
     } else info = 'Open more shops to find out';
     return `<div class="row"><div class="ic">${known ? lc.icon : '❔'}</div>
       <div class="tx"><div class="nm">${known ? lc.name : '???'}</div><div class="ds">${info}</div>
-      ${known ? `<div class="ds">Pizza prices ×${lc.priceMult}</div><div class="ds"><b>${lc.special.title}</b> · ${lc.special.desc}</div>` : ''}</div>${btn}</div>`;
+      ${known ? `<div class="ds">${lc.special.mainName || 'Pizza'} prices ×${lc.priceMult}</div><div class="ds"><b>${lc.special.title}</b> · ${lc.special.desc}</div>` : ''}</div>${btn}</div>`;
   }).join('') + franchiseHtml();
   if (shopList._html !== html) { shopList.innerHTML = html; shopList._html = html; }
 }
@@ -2577,8 +2671,9 @@ function hud(dt) {
   const g = L.goal;
   const goal = g ? `🎯 ${GOAL_TEXT[g.type](g.target)} · ${fmt(Math.min(g.progress, g.target))}/${fmt(g.target)} · 💵 $${fmt(g.reward)}` : '';
   if (goalTag.textContent !== goal) goalTag.textContent = goal;
-  const ev = rushLeft > 0 ? `🔥 ${loc().special.rushEvery ? 'Lunch rush' : 'Rush hour'} · ${Math.ceil(rushLeft)}s`
-    : loc().special.rushEvery && L.unlocked.cashier ? `🏙️ Lunch rush in ${Math.ceil(rushT)}s` : '';
+  const rushName = loc().special.rushName || (loc().special.rushEvery ? 'Lunch rush' : 'Rush hour');
+  const ev = rushLeft > 0 ? `🔥 ${rushName} · ${Math.ceil(rushLeft)}s`
+    : loc().special.rushEvery && L.unlocked.cashier ? `${loc().special.rushIcon || '🏙️'} ${rushName} in ${Math.ceil(rushT)}s` : '';
   if (eventTag.textContent !== ev) eventTag.textContent = ev;
   // Dock badge (macOS app): show cash waiting while the window is in the background.
   badgeT -= dt;

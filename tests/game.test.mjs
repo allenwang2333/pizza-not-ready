@@ -688,8 +688,8 @@ test('the drink bar is optional, needs soda, and each location sells its own sid
   const run = game();
   assert.equal(run('UNLOCKS.find(d => d.id === "side").optional'), true);
   assert.equal(run('UNLOCKS.find(d => d.id === "side").req'), 'soda');
-  assert.equal(run("LOCATIONS.map(l => l.side.name).join()"), 'Boba Tea,Mango Boba,Coffee,Matcha Latte,Nebula Latte');
-  assert.equal(run('new Set(LOCATIONS.map(l => l.side.icon)).size'), 5);
+  assert.equal(run("LOCATIONS.map(l => l.side.name).join()"), 'Boba Tea,Mango Boba,Coffee,Matcha Latte,Nebula Latte,Soy Milk');
+  assert.equal(run('new Set(LOCATIONS.map(l => l.side.icon)).size'), 6);
   assert.equal(run("visibleZones().some(d => d.id === 'side')"), false);
   run('L.unlocked.soda = true;');
   assert.equal(run("visibleZones().some(d => d.id === 'side')"), true);
@@ -753,4 +753,45 @@ test('the drink bar supports the drive-thru and saves its stock', () => {
   const legacy = game({ money: 5, shops: [{ unlocked: { oven1: true }, counter: 3 }] });
   assert.equal(legacy('L.side'), 0);
   assert.equal(legacy('L.unlocked.side'), undefined);
+});
+
+test('Jianbing Street sells jianbing in place of pizza at the pizza price scale', () => {
+  const run = game();
+  assert.equal(run('LOCATIONS.length'), 6);
+  assert.equal(run("itemInfo('pizza').name"), 'Pizza');
+  run('S.cur = 5;');
+  assert.equal(run("itemInfo('pizza').name"), 'Jianbing');
+  assert.equal(run("itemInfo('pizza').icon"), '🥞');
+  assert.equal(run("equipInfo('oven2').name"), 'Griddle');
+  assert.equal(run("zoneInfo({ id: 'oven3', name: 'Oven' }).name"), 'Griddle');
+  assert.equal(run("UPGRADES.find(u => u.id === 'price').desc(0)"), 'Jianbing sells for $1215');
+  assert.equal(run("itemInfo('soda').name"), 'Sour Plum Drink');
+  assert.equal(run("itemPrice('pizza') / (5 * 243)"), 1);
+  run('S.cur = 0;');
+  assert.equal(run("equipInfo('oven2').name"), 'Oven');
+});
+
+test('Jianbing Street is the next shop after Moon Base and costs more than Moon Base', () => {
+  const run = game();
+  run(`S.shops = LOCATIONS.slice(0, 5).map(() => newShop()); goToShop(4);
+    for (const d of UNLOCKS) L.unlocked[d.id] = true; syncWorld();`);
+  assert.equal(run("visibleZones().map(d => d.id).join()"), 'newshop');
+  assert.equal(run('visibleZones()[0].name'), 'Jianbing Street');
+  assert.equal(run('visibleZones()[0].fixed'), 8000 * 3125);
+  run('S.money = 8000 * 3125; unlock(visibleZones()[0]);');
+  assert.equal(run('S.shops.length'), 6);
+  assert.equal(run('S.cur'), 5);
+  assert.equal(run('idleRateFor(newShop(), 5)'), 0);
+  assert.equal(run('visibleZones().some(d => d.id === "newshop")'), false);
+});
+
+test('the breakfast rush uses its own name and the shared rush timer', () => {
+  const run = game();
+  run(`S.shops = LOCATIONS.map(() => newShop()); goToShop(5);
+    L.unlocked.cashier = true; updateEvents(99);`);
+  assert.equal(run('rushLeft'), 0);
+  run('updateEvents(1);');
+  assert.equal(run('rushLeft'), 30);
+  assert.equal(run('rushT'), 100);
+  assert.equal(run('loc().special.rushName'), 'Breakfast rush');
 });
